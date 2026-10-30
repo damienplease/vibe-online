@@ -29,3 +29,26 @@
 #profileShorts .short-follow{border:1px solid #fff8;border-radius:16px;background:#ffffff20;color:#fff;padding:5px 10px}
 .dm-profile-link{display:block;background:none;border:0;padding:0;margin:0 0 5px;color:#c9a9ff;font-size:11px;font-weight:700;cursor:pointer;text-align:left}
 @media(max-width:650px){#shortFeed{max-height:calc(100dvh - 250px);padding:0 0 16px}#shortFeed .short-post{width:100%;height:min(72dvh,700px);min-height:390px;border-radius:12px}#shortFeed .short-actions-rail{right:7px;bottom:18px}#shortFeed .short-actions-rail button{width:42px;min-height:44px}#shortFeed .short-overlay{right:60px;padding-left:12px}}
+
+/* VIBE Shorts refinement: full-height portrait feed and separate creator corner */
+#view-shorts.shorts-view{position:relative;display:none;min-height:calc(100dvh - 120px);height:calc(100dvh - 120px);padding:0 245px 0 0;margin:-30px - clamp(18px,4vw,54px) 0;overflow:hidden}
+#view-shorts.shorts-view.active{display:block}
+#view-shorts #shortFeed{height:100%;max-height:none;width:100%;margin:0;padding:0;gap:0;overflow-y:auto;scroll-snap-type:y mandatory;}
+#view-shorts #shortFeed .short-post{width:100%;height:100%;min-height:100%;max-height:none;border:0;border-radius:0;scroll-snap-align:start;}
+#view-shorts #shortFeed .short-post video{width:100%;height:100%;max-height:none;object-fit:contain;}
+#view-shorts #shortFeed .short-actions-rail{right:18px;bottom:112px;z-index:3;}
+#view-shorts #shortFeed .short-overlay{bottom:20px;right:86px;z-index:2;}
+.short-create-corner{position:absolute;right:18px;top:50%;transform:translateY(-50%);width:205px;padding:18px;display:flex;flex-direction:column;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:17px;z-index:4;box-shadow:0 12px 35px #0005}
+.short-create-corner strong{font:600 18px 'Space Grotesk',sans-serif}
+.short-create-corner p,.short-create-corner small{font-size:11px;color:var(--muted);line-height:1.5;margin:0}
+.short-create-corner .primary{display:block;text-align:center;width:100%;font-size:11px}
+.short-create-corner .file-label{position:relative;overflow:hidden;cursor:pointer}
+.short-create-corner input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+#profileShorts.short-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:18px}
+#profileShorts .short-post{aspect-ratio:9/16;max-height:360px;border-radius:10px}
+#profileShorts .short-post video{height:100%;width:100%;object-fit:cover}
+#profileShorts .short-actions-rail{display:none}
+.dm-person-link{display:inline-flex;align-items:center;gap:8px;margin:0 0 6px;padding:0;border:0;background:transparent;color:#d9c5ff;cursor:pointer;text-align:left}
+.dm-person-avatar{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(140deg,#9265c8,#e36ca9);color:white;font-size:9px;font-weight:800}
+.dm-person-link strong{font-size:11px}
+@media(max-width:850px){#view-shorts.shorts-view{padding-right:0;margin:-20px -13px 0;height:calc(100dvh - 145px);min-height:500px}.short-create-corner{right:10px;top:12px;transform:none;width:auto;padding:8px;flex-direction:row;align-items:center;gap:6px;background:#15121edc}.short-create-corner strong,.short-create-corner p,.short-create-corner small{display:none}.short-create-corner .primary{width:auto;padding:8px 10px;font-size:10px}.short-create-corner .file-label{margin:0}#view-shorts #shortFeed .short-actions-rail{right:8px;bottom:105px}#view-shorts #shortFeed .short-overlay{right:62px;bottom:12px;padding:55px 12px 12px}}
