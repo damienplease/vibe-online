@@ -273,13 +273,15 @@ app.get('/api/conversations/:id/messages', requireAuth, async (req, res, next) =
 // PostgreSQL stores metadata and social interactions.
 app.get('/api/shorts', requireAuth, async (req, res, next) => {
   try {
-    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,(s.user_id=$1) AS is_owner,
+    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,
       (SELECT COUNT(*)::int FROM short_likes l WHERE l.short_id=s.id) AS likes,
       (SELECT COUNT(*)::int FROM short_comments c WHERE c.short_id=s.id) AS comments,
       (SELECT COUNT(*)::int FROM short_reposts r WHERE r.short_id=s.id) AS reposts,
       EXISTS(SELECT 1 FROM short_likes l WHERE l.short_id=s.id AND l.user_id=$1) AS liked,
       EXISTS(SELECT 1 FROM short_favorites f WHERE f.short_id=s.id AND f.user_id=$1) AS favorited,
-      EXISTS(SELECT 1 FROM short_reposts r WHERE r.short_id=s.id AND r.user_id=$1) AS reposted
+      EXISTS(SELECT 1 FROM short_reposts r WHERE r.short_id=s.id AND r.user_id=$1) AS reposted,
+      EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=$1 AND f.followed_id=u.id) AS is_following,
+      (u.id=$1) AS is_me
       FROM shorts s JOIN users u ON u.id=s.user_id ORDER BY s.created_at DESC LIMIT 100`, [req.session.userId]);
     res.json({ shorts: result.rows });
   } catch (error) { next(error); }
@@ -307,17 +309,6 @@ app.post('/api/shorts', requireAuth, async (req, res, next) => {
     res.status(201).json({ short: result.rows[0] });
   } catch (error) { next(error); }
 });
-app.delete('/api/shorts/:id', requireAuth, async (req, res, next) => {
-  try {
-    const result = await pool.query(
-      'DELETE FROM shorts WHERE id=$1 AND user_id=$2 RETURNING id',
-      [req.params.id, req.session.userId]
-    );
-    if (!result.rowCount) return apiError(res, 404, 'Short not found or you do not have permission to delete it.');
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (error) { next(error); }
-});
-
 app.get('/api/shorts/:id/comments', requireAuth, async (req, res, next) => {
   try { const r=await pool.query(`SELECT c.id,c.text,c.created_at,u.username FROM short_comments c JOIN users u ON u.id=c.user_id WHERE c.short_id=$1 ORDER BY c.created_at ASC LIMIT 100`,[req.params.id]); res.json({comments:r.rows}); }
   catch(error){next(error)}
