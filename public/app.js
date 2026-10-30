@@ -177,6 +177,13 @@ $('logout').addEventListener('click', async () => {
   if(socket) socket.disconnect(); await finishCall(false); me=null; conversations=[]; activeConversation=null; $('app').classList.add('hidden'); $('auth').classList.remove('hidden'); $('password').value=''; setAuthMode('login');
 });
 
+function attachRemoteMedia(stream) {
+  const video=$('remoteVideo'); const audio=$('remoteAudio');
+  video.srcObject=stream; video.muted=true;
+  audio.srcObject=stream; audio.muted=false; audio.volume=1;
+  const play=audio.play(); if(play&&typeof play.catch==='function') play.catch(()=>{ $('callStatus').textContent='Call connected. Tap the page or use the audio controls if you cannot hear the other person.'; });
+  if(video.play) video.play().catch(()=>{});
+}
 async function startCall(mode) {
   if (!activeConversation || activeConversation.type !== 'direct') return toast('Voice and video calls work in direct chats only.');
   const other = activeConversation.members.find(m => m.id !== me.id);
@@ -186,10 +193,10 @@ async function startCall(mode) {
     currentCall = {conversationId:activeConversation.id,targetUserId:other.id,mode,initiator:true};
     peer = new RTCPeerConnection(rtcConfig);
     localStream.getTracks().forEach(track=>peer.addTrack(track,localStream));
-    peer.ontrack = e => { $('remoteVideo').srcObject = e.streams[0]; };
+    peer.ontrack = e => { attachRemoteMedia(e.streams[0]); };
     peer.onicecandidate = e => { if(e.candidate && currentCall) socket.emit('call:ice',{conversationId:currentCall.conversationId,targetUserId:currentCall.targetUserId,candidate:e.candidate}); };
     peer.onconnectionstatechange = () => { if(peer && ['failed','disconnected'].includes(peer.connectionState)) $('callStatus').textContent='Connection interrupted. A TURN server may be required.'; };
-    $('localVideo').srcObject=localStream; $('remoteVideo').srcObject=null;
+    $('localVideo').srcObject=localStream; $('remoteVideo').srcObject=null; $('remoteAudio').srcObject=null; $('remoteAudio').srcObject=null;
     $('incomingActions').classList.add('hidden'); $('callTitle').textContent='Calling @'+other.username; $('callStatus').textContent='Waiting for them to answer…'; $('callLayer').classList.remove('hidden');
     socket.emit('call:invite',{conversationId:activeConversation.id,targetUserId:other.id,mode});
     // Offer is sent when callee accepts, after they have acquired their media.
@@ -210,9 +217,9 @@ async function acceptInvite() {
     currentCall={conversationId:invite.conversationId,targetUserId:invite.fromUserId,mode:invite.mode,initiator:false};
     peer=new RTCPeerConnection(rtcConfig);
     localStream.getTracks().forEach(t=>peer.addTrack(t,localStream));
-    peer.ontrack=e=>{$('remoteVideo').srcObject=e.streams[0];};
+    peer.ontrack=e=>{attachRemoteMedia(e.streams[0]);};
     peer.onicecandidate=e=>{if(e.candidate&&currentCall)socket.emit('call:ice',{conversationId:currentCall.conversationId,targetUserId:currentCall.targetUserId,candidate:e.candidate});};
-    $('localVideo').srcObject=localStream; $('remoteVideo').srcObject=null;
+    $('localVideo').srcObject=localStream; $('remoteVideo').srcObject=null; $('remoteAudio').srcObject=null; $('remoteAudio').srcObject=null;
     $('incomingActions').classList.add('hidden'); $('callTitle').textContent='Connected to @'+invite.fromUsername; $('callStatus').textContent='Setting up call…';
     socket.emit('call:accept',{conversationId:invite.conversationId,targetUserId:invite.fromUserId});
     // Callee sends an offer; caller answers.
@@ -230,7 +237,7 @@ async function finishCall(notify) {
   if(notify&&currentCall&&socket)socket.emit('call:end',{conversationId:currentCall.conversationId,targetUserId:currentCall.targetUserId});
   if(peer){peer.ontrack=null;peer.onicecandidate=null;peer.close();peer=null}
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null}
-  $('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('callLayer').classList.add('hidden');$('incomingActions').classList.add('hidden');currentCall=null;pendingInvite=null;muted=false;cameraOff=false;
+  $('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('remoteAudio').srcObject=null;$('callLayer').classList.add('hidden');$('incomingActions').classList.add('hidden');currentCall=null;pendingInvite=null;muted=false;cameraOff=false;
   $('muteCall').textContent='Mute mic';$('cameraCall').textContent='Camera off';
 }
 let playlist = [], currentAudioIndex = -1;
@@ -278,9 +285,11 @@ async function uploadShort(file,caption){
   if(!file||!file.type.startsWith('video/'))throw new Error('Choose a video file.');
   if(file.size>100*1024*1024)throw new Error('Videos must be smaller than 100 MB.');
   const contentType=file.type.startsWith('video/webm')?'video/webm':file.type.startsWith('video/mp4')?'video/mp4':file.type.startsWith('video/quicktime')?'video/quicktime':file.type;
-  const signed=await api('/api/shorts/upload-url',{method:'POST',body:JSON.stringify({contentType,size:file.size})});
-  const put=await fetch(signed.uploadUrl,{method:'PUT',headers:{'Content-Type':contentType},body:file});if(!put.ok)throw new Error('Video upload failed. Check video storage setup and try again.');
-  await api('/api/shorts',{method:'POST',body:JSON.stringify({key:signed.key,videoUrl:signed.videoUrl,caption})});await loadShorts();toast('Your Short has been posted.');
+  const config=await api('/api/shorts/upload-url',{method:'POST',body:JSON.stringify({contentType,size:file.size})});
+  const form=new FormData();form.append('file',file);form.append('upload_preset',config.uploadPreset);form.append('folder','vibe/shorts');
+  const uploaded=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(config.cloudName)}/video/upload`,{method:'POST',body:form});
+  const asset=await uploaded.json();if(!uploaded.ok||!asset.secure_url||!asset.public_id)throw new Error(asset.error?.message||'Cloudinary upload failed. Check your preset settings.');
+  await api('/api/shorts',{method:'POST',body:JSON.stringify({publicId:asset.public_id,videoUrl:asset.secure_url,caption})});await loadShorts();toast('Your Short has been posted.');
 }
 $('shortUpload').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;const caption=prompt('Add a caption for your Short (optional):')||'';try{await uploadShort(file,caption)}catch(err){toast(err.message)}});
 $('recordShort').addEventListener('click',async()=>{
