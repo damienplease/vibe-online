@@ -52,3 +52,10 @@
 .dm-person-avatar{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(140deg,#9265c8,#e36ca9);color:white;font-size:9px;font-weight:800}
 .dm-person-link strong{font-size:11px}
 @media(max-width:850px){#view-shorts.shorts-view{padding-right:0;margin:-20px -13px 0;height:calc(100dvh - 145px);min-height:500px}.short-create-corner{right:10px;top:12px;transform:none;width:auto;padding:8px;flex-direction:row;align-items:center;gap:6px;background:#15121edc}.short-create-corner strong,.short-create-corner p,.short-create-corner small{display:none}.short-create-corner .primary{width:auto;padding:8px 10px;font-size:10px}.short-create-corner .file-label{margin:0}#view-shorts #shortFeed .short-actions-rail{right:8px;bottom:105px}#view-shorts #shortFeed .short-overlay{right:62px;bottom:12px;padding:55px 12px 12px}}
+
+/* Seamless Shorts feed: keep wheel/touch scrolling, hide the visible scrollbar. */
+#view-shorts #shortFeed{scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior-y:contain;scroll-behavior:smooth;}
+#view-shorts #shortFeed::-webkit-scrollbar{display:none;width:0;height:0;}
+#view-shorts #shortFeed .short-post{scroll-snap-stop:always;}
+.dm-person-link{position:relative;z-index:2;pointer-events:auto;}
+.dm-person-avatar{flex:0 0 27px;}

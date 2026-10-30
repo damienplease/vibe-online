@@ -99,7 +99,8 @@ function navigate(view) {
   if (view === 'messages') loadConversations().catch(e => toast(e.message));
   if (view === 'shorts') loadShorts().catch(e => toast(e.message));
   if (view === 'streaming') loadLiveStreams().catch(e => toast(e.message));
-  if (view === 'profile') loadProfile(me.username).catch(e => toast(e.message));
+  if (view === 'profile' && !profileData) loadProfile(me.username).catch(e => toast(e.message));
+  if (view === 'profile' && profileData) $('viewTitle').textContent = profileData.profile.isMe ? 'Your profile.' : '@' + profileData.profile.username;
 }
 document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.view)));
 document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.goto)));
@@ -124,7 +125,7 @@ function appendMessage(m) {
   const host = $('messagesList'); if (host.querySelector('[data-message-id="' + CSS.escape(m.id) + '"]')) return;
   const el = document.createElement('div'); el.className = 'msg' + (m.senderId === me.id ? ' mine' : ''); el.dataset.messageId = m.id;
   const time = new Date(m.createdAt);
-  el.innerHTML = (m.senderId === me.id ? '' : '<button class="dm-person-link" data-profile="' + esc(m.sender || 'user') + '"><span class="dm-person-avatar">' + esc((m.sender || 'U').slice(0,2).toUpperCase()) + '</span><strong>@' + esc(m.sender || 'user') + '</strong></button>') + '<div class="bubble">' + esc(m.text) + '</div><time>' + (Number.isNaN(time.getTime()) ? '' : time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time>';
+  el.innerHTML = (m.senderId === me.id ? '' : '<button type="button" class="dm-person-link" data-profile="' + esc(m.sender || 'user') + '" aria-label="Open @' + esc(m.sender || 'user') + ' profile"><span class="dm-person-avatar">' + esc((m.sender || 'U').slice(0,2).toUpperCase()) + '</span><strong>@' + esc(m.sender || 'user') + '</strong></button>') + '<div class="bubble">' + esc(m.text) + '</div><time>' + (Number.isNaN(time.getTime()) ? '' : time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time>';
   host.appendChild(el); host.scrollTop = host.scrollHeight;
 }
 $('messagesList').addEventListener('click', e => { const profile=e.target.closest('[data-profile]'); if(profile){loadProfile(profile.dataset.profile).then(()=>navigate('profile')).catch(err=>toast(err.message));} });
@@ -308,7 +309,13 @@ $('recordShort').addEventListener('click',async()=>{
   }catch(err){shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;toast('Camera access was not available. Allow camera and microphone access on the secure website.');}
 });
 async function loadProfile(username){
-  const data=await api('/api/profile/'+encodeURIComponent(username));profileData=data;profileTab='posts';renderProfile();
+  const requested=String(username||'').trim();
+  if(!requested) throw new Error('Could not identify that VIBE user.');
+  const data=await api('/api/profile/'+encodeURIComponent(requested));
+  if(!data?.profile?.username) throw new Error('That profile could not be loaded.');
+  profileData=data;profileTab='posts';renderProfile();
+  $('viewTitle').textContent=data.profile.isMe?'Your profile.':'@'+data.profile.username;
+  return data;
 }
 function renderPeople(people,host){host.innerHTML='';if(!people?.length){host.innerHTML='<div class="empty-state compact">No users to show yet.</div>';return;}people.forEach(u=>{const row=document.createElement('div');row.className='track-row';row.innerHTML=`<div class="avatar">${esc(u.username.slice(0,2).toUpperCase())}</div><div class="track-title"><strong>@${esc(u.username)}</strong></div><button class="smallbtn" data-profile="${esc(u.username)}">View profile</button>${u.id===me.id?'':`<button class="smallbtn" data-follow-user="${esc(u.id)}">${u.following?'Following':'Follow'}</button>`}`;host.appendChild(row)});}
 function renderProfile(){
