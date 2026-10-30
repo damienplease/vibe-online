@@ -30,13 +30,12 @@ Required for the app:
 - `SESSION_SECRET` — random private string of at least 32 characters
 - `NODE_ENV=production`
 
-Required for Shorts uploads and playback (Cloudflare R2):
+Required for Shorts uploads and playback (Cloudinary):
 
-- `R2_ACCOUNT_ID` — Cloudflare account ID
-- `R2_ACCESS_KEY_ID` — R2 API token access key ID
-- `R2_SECRET_ACCESS_KEY` — R2 API token secret
-- `R2_BUCKET` — exact R2 bucket name
-- `R2_PUBLIC_BASE_URL` — public custom domain for the bucket, e.g. `https://media.yourdomain.com` (no trailing slash)
+- `CLOUDINARY_CLOUD_NAME` — cloud name from your Cloudinary dashboard
+- `CLOUDINARY_UPLOAD_PRESET` — unsigned upload preset name (for this setup: `vibe_shorts`)
+
+Configure the unsigned preset to accept only MP4, WebM and MOV videos, set a maximum file size of 25 MB, and use the `vibe/shorts` asset folder. Never expose an API secret in browser code. The application uploads directly to Cloudinary and stores the secure video URL in PostgreSQL.
 
 Required for live streaming (LiveKit):
 
@@ -46,15 +45,14 @@ Required for live streaming (LiveKit):
 
 The LiveKit secret stays on the server. The browser receives short-lived room tokens with publishing permission only for the stream owner.
 
-## Cloudflare R2 setup for Shorts
+## Cloudinary setup for Shorts
 
-1. Create an R2 bucket in Cloudflare.
-2. Create an R2 API token with object read/write access only to this bucket.
-3. Connect a public custom domain to the bucket. Set that URL as `R2_PUBLIC_BASE_URL`.
-4. In the bucket's CORS settings, allow your VIBE origin (for example `https://vibe-online.onrender.com`) with method `PUT`, and allow the `Content-Type` request header. Allow `GET` and `HEAD` for playback if the CORS editor asks for read methods too.
-5. Add all five R2 variables to the Render web service Environment page, then save.
+1. Create an unsigned upload preset named `vibe_shorts`.
+2. Restrict allowed formats to `mp4`, `webm` and `mov`; set the maximum file size to 25 MB.
+3. Set the asset folder to `vibe/shorts`.
+4. Add `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` to the Render web service Environment page, then save.
 
-Do not put R2 keys in the browser or in the GitHub repository. Uploaded clips are public to anyone who has the video URL; do not upload private or sensitive recordings.
+Unsigned uploads are public media. Do not upload private or sensitive recordings. Review your Cloudinary usage limits before inviting users to upload videos.
 
 ## LiveKit setup for Streaming
 
@@ -92,3 +90,7 @@ The database tables are created automatically at startup. Existing VIBE accounts
 - Configure R2 CORS exactly for the deployed VIBE origin.
 - Test upload, playback, live publish/watch/end, follow/unfollow, comments, likes, favourites and reposts with multiple accounts before launch.
 - This is a development update, not a security certification or a guarantee of OWASP compliance. Review privacy, moderation, abuse reporting, retention, rate limits and account recovery before public release.
+
+
+## Cloudinary video storage for Shorts
+Set `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` in your hosting environment. Create an unsigned upload preset named `vibe_shorts` in Cloudinary, restrict allowed formats to mp4/webm/mov, set a maximum file size of 25 MB, and set the asset folder to `vibe/shorts`. Do not expose an API secret in browser code. The application uploads videos directly to Cloudinary and stores their URLs in PostgreSQL.

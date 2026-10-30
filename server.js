@@ -9,8 +9,6 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const { Server } = require('socket.io');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { AccessToken } = require('livekit-server-sdk');
 
 const app = express();
@@ -19,17 +17,13 @@ const io = new Server(server, { maxHttpBufferSize: 1e6 });
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
-const R2_BUCKET = process.env.R2_BUCKET;
-const R2_PUBLIC_BASE_URL = String(process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.CLOUDINARY_UPLOAD_PRESET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
-const mediaStorageReady = Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET && R2_PUBLIC_BASE_URL);
+const mediaStorageReady = Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
 const liveKitReady = Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
-const s3 = mediaStorageReady ? new S3Client({ region: 'auto', endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`, credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY } }) : null;
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required. Add your Render PostgreSQL Internal Database URL.');
 if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
@@ -291,28 +285,25 @@ app.get('/api/shorts', requireAuth, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 app.post('/api/shorts/upload-url', requireAuth, async (req, res) => {
-  if (!mediaStorageReady) return apiError(res, 503, 'Video storage is not configured yet. Add the Cloudflare R2 environment variables first.');
+  if (!mediaStorageReady) return apiError(res, 503, 'Video storage is not configured yet. Add CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in Render.');
   const type = String(req.body.contentType || '');
   const size = Number(req.body.size || 0);
   const allowed = ['video/mp4','video/webm','video/quicktime'];
   if (!allowed.includes(type)) return apiError(res, 400, 'Upload an MP4, WebM or MOV video.');
-  if (!Number.isFinite(size) || size < 1 || size > 100 * 1024 * 1024) return apiError(res, 400, 'Video must be smaller than 100 MB.');
-  try {
-    const key = `shorts/${req.session.userId}/${makeId()}.${type === 'video/webm' ? 'webm' : type === 'video/quicktime' ? 'mov' : 'mp4'}`;
-    const command = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, ContentType: type });
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 600 });
-    res.json({ uploadUrl, key, videoUrl: `${R2_PUBLIC_BASE_URL}/${key}` });
-  } catch (error) { console.error('R2 signing failed:', error.message); apiError(res, 500, 'Could not prepare the video upload.'); }
+  if (!Number.isFinite(size) || size < 1 || size > 25 * 1024 * 1024) return apiError(res, 400, 'Video must be smaller than 25 MB.');
+  res.json({ cloudName: CLOUDINARY_CLOUD_NAME, uploadPreset: CLOUDINARY_UPLOAD_PRESET, resourceType: 'video' });
 });
 app.post('/api/shorts', requireAuth, async (req, res, next) => {
   try {
-    const key = String(req.body.key || '');
     const videoUrl = String(req.body.videoUrl || '');
+    const publicId = String(req.body.publicId || '');
     const caption = String(req.body.caption || '').trim();
-    if (!mediaStorageReady || !key.startsWith(`shorts/${req.session.userId}/`) || videoUrl !== `${R2_PUBLIC_BASE_URL}/${key}`) return apiError(res, 400, 'Invalid video upload. Please upload your video again.');
+    let parsed;
+    try { parsed = new URL(videoUrl); } catch { return apiError(res, 400, 'Invalid video URL. Please upload your video again.'); }
+    if (!mediaStorageReady || parsed.protocol !== 'https:' || parsed.hostname !== 'res.cloudinary.com' || !parsed.pathname.startsWith(`/${CLOUDINARY_CLOUD_NAME}/video/upload/`) || !publicId.startsWith('vibe/shorts/')) return apiError(res, 400, 'Invalid Cloudinary video upload. Please upload your video again.');
     if (caption.length > 500) return apiError(res, 400, 'Caption must be 500 characters or fewer.');
     const id = makeId();
-    const result = await pool.query('INSERT INTO shorts(id,user_id,video_url,storage_key,caption) VALUES($1,$2,$3,$4,$5) RETURNING id,video_url,caption,created_at', [id, req.session.userId, videoUrl, key, caption]);
+    const result = await pool.query('INSERT INTO shorts(id,user_id,video_url,storage_key,caption) VALUES($1,$2,$3,$4,$5) RETURNING id,video_url,caption,created_at', [id, req.session.userId, videoUrl, publicId, caption]);
     res.status(201).json({ short: result.rows[0] });
   } catch (error) { next(error); }
 });
