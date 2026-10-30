@@ -273,7 +273,7 @@ app.get('/api/conversations/:id/messages', requireAuth, async (req, res, next) =
 // PostgreSQL stores metadata and social interactions.
 app.get('/api/shorts', requireAuth, async (req, res, next) => {
   try {
-    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,
+    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,(s.user_id=$2) AS is_owner,
       (SELECT COUNT(*)::int FROM short_likes l WHERE l.short_id=s.id) AS likes,
       (SELECT COUNT(*)::int FROM short_comments c WHERE c.short_id=s.id) AS comments,
       (SELECT COUNT(*)::int FROM short_reposts r WHERE r.short_id=s.id) AS reposts,
@@ -307,6 +307,17 @@ app.post('/api/shorts', requireAuth, async (req, res, next) => {
     res.status(201).json({ short: result.rows[0] });
   } catch (error) { next(error); }
 });
+app.delete('/api/shorts/:id', requireAuth, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM shorts WHERE id=$1 AND user_id=$2 RETURNING id',
+      [req.params.id, req.session.userId]
+    );
+    if (!result.rowCount) return apiError(res, 404, 'Short not found or you do not have permission to delete it.');
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (error) { next(error); }
+});
+
 app.get('/api/shorts/:id/comments', requireAuth, async (req, res, next) => {
   try { const r=await pool.query(`SELECT c.id,c.text,c.created_at,u.username FROM short_comments c JOIN users u ON u.id=c.user_id WHERE c.short_id=$1 ORDER BY c.created_at ASC LIMIT 100`,[req.params.id]); res.json({comments:r.rows}); }
   catch(error){next(error)}
