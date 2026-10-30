@@ -52,3 +52,19 @@ Deploy the Node app to a host that supports long-lived WebSocket connections. Co
 
 ## Health check
 Visit `/api/health` while the server is running. It should return JSON with `ok: true`.
+
+## PostgreSQL deployment update
+
+The server now requires PostgreSQL and a persistent session store. On Render:
+
+1. Add `DATABASE_URL` to the VIBE web service using the database's **Internal Database URL** (the web service and database must be in the same region).
+2. Set `SESSION_SECRET` to a unique random secret of at least 32 characters. Keep it private and do not commit it to Git.
+3. Set `NODE_ENV=production`.
+4. Push this updated project to the GitHub branch connected to the Render web service. Render will install the new dependencies and deploy.
+5. After deployment, open `/api/health`. A successful response includes `"database":"connected"`.
+
+The app creates its PostgreSQL tables automatically on startup. User accounts, conversations, messages, and sessions created after this update are stored in PostgreSQL. **Existing accounts and messages in the old `data/db.json` file are not automatically imported**; arrange a proper migration before replacing a live app that contains data you need to keep.
+
+For local development, set `DATABASE_URL` to a PostgreSQL connection string and set `SESSION_SECRET` in your local `.env` file. Never upload `.env` or share database credentials.
+
+This is a security-improvement step, not a claim of OWASP compliance. Rate limiting, CSRF protection, broader validation, security testing, and a review of the remaining features still need to be completed.
