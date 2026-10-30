@@ -267,14 +267,38 @@ function renderShorts(items,host){
   if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
   items.forEach(item=>{
     const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
-    card.innerHTML=`<video src="${esc(item.video_url)}" controls playsinline preload="metadata"></video><div class="short-post-body"><div class="short-author"><div class="avatar">${esc(item.username.slice(0,2).toUpperCase())}</div><button data-profile="${esc(item.username)}">@${esc(item.username)}</button></div><p class="short-caption">${esc(item.caption||'')}</p><div class="short-actions-row"><button data-action="like" class="${item.liked?'selected':''}">♥ ${Number(item.likes)||0}</button><button data-action="comment">Comment · ${Number(item.comments)||0}</button><button data-action="repost" class="${item.reposted?'selected':''}">↻ ${Number(item.reposts)||0}</button><button data-action="favorite" class="${item.favorited?'selected':''}">★ Save</button></div></div>`;
+    card.innerHTML=`<video src="${esc(item.video_url)}" controls playsinline preload="metadata"></video><div class="short-post-body"><div class="short-author"><div class="avatar">${esc(item.username.slice(0,2).toUpperCase())}</div><button data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_owner?'<button class="delete-short" data-action="delete" title="Delete your Short">Delete</button>':''}</div><p class="short-caption">${esc(item.caption||'')}</p><div class="short-actions-row"><button data-action="like" class="${item.liked?'selected':''}">♥ ${Number(item.likes)||0}</button><button data-action="comment">Comment · ${Number(item.comments)||0}</button><button data-action="repost" class="${item.reposted?'selected':''}">↻ ${Number(item.reposts)||0}</button><button data-action="favorite" class="${item.favorited?'selected':''}">★ Save</button></div></div>`;
     host.appendChild(card);
   });
+  if(host.id==='shortFeed') observeShortVideos(host);
+}
+let shortVideoObserver;
+function observeShortVideos(host){
+  if(!('IntersectionObserver' in window)) return;
+  if(!shortVideoObserver){
+    shortVideoObserver = new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        const video=entry.target.querySelector('video');
+        if(!video) return;
+        if(entry.isIntersecting) video.play().catch(()=>{});
+        else video.pause();
+      });
+    },{root:host,threshold:0.7});
+  }
+  host.querySelectorAll('.short-post').forEach(card=>shortVideoObserver.observe(card));
 }
 async function handleShortAction(e){
   const profile=e.target.closest('[data-profile]'); if(profile){await loadProfile(profile.dataset.profile);navigate('profile');return;}
   const btn=e.target.closest('[data-action]'); if(!btn)return; const card=btn.closest('[data-short-id]');if(!card)return;const id=card.dataset.shortId,action=btn.dataset.action;
   try{
+    if(action==='delete'){
+      if(!confirm('Delete this Short from VIBE? This cannot be undone.')) return;
+      await api(`/api/shorts/${id}`,{method:'DELETE'});
+      card.remove();
+      if(!$('shortFeed').querySelector('[data-short-id]')) $('shortFeed').innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';
+      toast('Short deleted from VIBE.');
+      return;
+    }
     if(action==='comment'){const data=await api(`/api/shorts/${id}/comments`);const comments=data.comments.map(c=>`<div class="comment-line"><strong>@${esc(c.username)}</strong>${esc(c.text)}</div>`).join('')||'<p>No comments yet.</p>';openModal(`<h2>Comments</h2><div>${comments}</div><label>Add a comment<input id="newShortComment" maxlength="500" placeholder="Write something kind…"></label><button id="sendShortComment" class="primary">Post comment</button>`);$('sendShortComment').addEventListener('click',async()=>{try{await api(`/api/shorts/${id}/comments`,{method:'POST',body:JSON.stringify({text:$('newShortComment').value})});closeModal();await loadShorts();}catch(err){toast(err.message)}});return;}
     const result=await api(`/api/shorts/${id}/${action}`,{method:'POST'});btn.classList.toggle('selected',result.active);if(action==='like')btn.innerHTML=`♥ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else if(action==='repost')btn.textContent=`↻ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else btn.textContent=result.active?'★ Saved':'★ Save';
   }catch(err){toast(err.message)}
