@@ -273,7 +273,7 @@ app.get('/api/conversations/:id/messages', requireAuth, async (req, res, next) =
 // PostgreSQL stores metadata and social interactions.
 app.get('/api/shorts', requireAuth, async (req, res, next) => {
   try {
-    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,(s.user_id=$2) AS is_owner,
+    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,(s.user_id=$1) AS is_owner,
       (SELECT COUNT(*)::int FROM short_likes l WHERE l.short_id=s.id) AS likes,
       (SELECT COUNT(*)::int FROM short_comments c WHERE c.short_id=s.id) AS comments,
       (SELECT COUNT(*)::int FROM short_reposts r WHERE r.short_id=s.id) AS reposts,
