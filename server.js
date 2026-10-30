@@ -9,6 +9,9 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const { Server } = require('socket.io');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { AccessToken } = require('livekit-server-sdk');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,6 +19,17 @@ const io = new Server(server, { maxHttpBufferSize: 1e6 });
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const DATABASE_URL = process.env.DATABASE_URL;
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET = process.env.R2_BUCKET;
+const R2_PUBLIC_BASE_URL = String(process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+const LIVEKIT_URL = process.env.LIVEKIT_URL;
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
+const mediaStorageReady = Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET && R2_PUBLIC_BASE_URL);
+const liveKitReady = Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+const s3 = mediaStorageReady ? new S3Client({ region: 'auto', endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`, credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY } }) : null;
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required. Add your Render PostgreSQL Internal Database URL.');
 if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
@@ -126,6 +140,18 @@ async function initializeDatabase() {
     );
     CREATE INDEX IF NOT EXISTS messages_conversation_created_idx ON messages(conversation_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS conversation_members_user_idx ON conversation_members(user_id, conversation_id);
+    CREATE TABLE IF NOT EXISTS follows (follower_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, followed_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (follower_id, followed_id), CHECK (follower_id <> followed_id));
+    CREATE INDEX IF NOT EXISTS follows_followed_idx ON follows(followed_id);
+    CREATE TABLE IF NOT EXISTS shorts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, video_url TEXT NOT NULL, storage_key TEXT NOT NULL, caption VARCHAR(500) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE INDEX IF NOT EXISTS shorts_created_idx ON shorts(created_at DESC);
+    CREATE INDEX IF NOT EXISTS shorts_user_idx ON shorts(user_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS short_likes (short_id TEXT NOT NULL REFERENCES shorts(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(short_id,user_id));
+    CREATE TABLE IF NOT EXISTS short_favorites (short_id TEXT NOT NULL REFERENCES shorts(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(short_id,user_id));
+    CREATE TABLE IF NOT EXISTS short_reposts (short_id TEXT NOT NULL REFERENCES shorts(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(short_id,user_id));
+    CREATE TABLE IF NOT EXISTS short_comments (id TEXT PRIMARY KEY, short_id TEXT NOT NULL REFERENCES shorts(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text VARCHAR(500) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE INDEX IF NOT EXISTS short_comments_idx ON short_comments(short_id,created_at);
+    CREATE TABLE IF NOT EXISTS live_streams (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, room_name TEXT NOT NULL UNIQUE, title VARCHAR(100) NOT NULL, status VARCHAR(12) NOT NULL DEFAULT 'live' CHECK(status IN ('live','ended')), started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), ended_at TIMESTAMPTZ);
+    CREATE INDEX IF NOT EXISTS live_streams_status_idx ON live_streams(status,started_at DESC);
   `);
 }
 
@@ -247,6 +273,88 @@ app.get('/api/conversations/:id/messages', requireAuth, async (req, res, next) =
     res.json({ messages: result.rows.reverse().map(m => ({ id: m.id, conversationId: m.conversation_id, senderId: m.sender_id, sender: m.sender, text: m.text, createdAt: m.created_at })) });
   } catch (error) { next(error); }
 });
+
+
+// Social profiles and short-video feed. Media bytes are stored in Cloudflare R2;
+// PostgreSQL stores metadata and social interactions.
+app.get('/api/shorts', requireAuth, async (req, res, next) => {
+  try {
+    const result = await pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id AS user_id,u.username,
+      (SELECT COUNT(*)::int FROM short_likes l WHERE l.short_id=s.id) AS likes,
+      (SELECT COUNT(*)::int FROM short_comments c WHERE c.short_id=s.id) AS comments,
+      (SELECT COUNT(*)::int FROM short_reposts r WHERE r.short_id=s.id) AS reposts,
+      EXISTS(SELECT 1 FROM short_likes l WHERE l.short_id=s.id AND l.user_id=$1) AS liked,
+      EXISTS(SELECT 1 FROM short_favorites f WHERE f.short_id=s.id AND f.user_id=$1) AS favorited,
+      EXISTS(SELECT 1 FROM short_reposts r WHERE r.short_id=s.id AND r.user_id=$1) AS reposted
+      FROM shorts s JOIN users u ON u.id=s.user_id ORDER BY s.created_at DESC LIMIT 100`, [req.session.userId]);
+    res.json({ shorts: result.rows });
+  } catch (error) { next(error); }
+});
+app.post('/api/shorts/upload-url', requireAuth, async (req, res) => {
+  if (!mediaStorageReady) return apiError(res, 503, 'Video storage is not configured yet. Add the Cloudflare R2 environment variables first.');
+  const type = String(req.body.contentType || '');
+  const size = Number(req.body.size || 0);
+  const allowed = ['video/mp4','video/webm','video/quicktime'];
+  if (!allowed.includes(type)) return apiError(res, 400, 'Upload an MP4, WebM or MOV video.');
+  if (!Number.isFinite(size) || size < 1 || size > 100 * 1024 * 1024) return apiError(res, 400, 'Video must be smaller than 100 MB.');
+  try {
+    const key = `shorts/${req.session.userId}/${makeId()}.${type === 'video/webm' ? 'webm' : type === 'video/quicktime' ? 'mov' : 'mp4'}`;
+    const command = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, ContentType: type });
+    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 600 });
+    res.json({ uploadUrl, key, videoUrl: `${R2_PUBLIC_BASE_URL}/${key}` });
+  } catch (error) { console.error('R2 signing failed:', error.message); apiError(res, 500, 'Could not prepare the video upload.'); }
+});
+app.post('/api/shorts', requireAuth, async (req, res, next) => {
+  try {
+    const key = String(req.body.key || '');
+    const videoUrl = String(req.body.videoUrl || '');
+    const caption = String(req.body.caption || '').trim();
+    if (!mediaStorageReady || !key.startsWith(`shorts/${req.session.userId}/`) || videoUrl !== `${R2_PUBLIC_BASE_URL}/${key}`) return apiError(res, 400, 'Invalid video upload. Please upload your video again.');
+    if (caption.length > 500) return apiError(res, 400, 'Caption must be 500 characters or fewer.');
+    const id = makeId();
+    const result = await pool.query('INSERT INTO shorts(id,user_id,video_url,storage_key,caption) VALUES($1,$2,$3,$4,$5) RETURNING id,video_url,caption,created_at', [id, req.session.userId, videoUrl, key, caption]);
+    res.status(201).json({ short: result.rows[0] });
+  } catch (error) { next(error); }
+});
+app.get('/api/shorts/:id/comments', requireAuth, async (req, res, next) => {
+  try { const r=await pool.query(`SELECT c.id,c.text,c.created_at,u.username FROM short_comments c JOIN users u ON u.id=c.user_id WHERE c.short_id=$1 ORDER BY c.created_at ASC LIMIT 100`,[req.params.id]); res.json({comments:r.rows}); }
+  catch(error){next(error)}
+});
+app.post('/api/shorts/:id/comments', requireAuth, async (req,res,next)=>{
+  try { const text=String(req.body.text||'').trim(); if(!text||text.length>500)return apiError(res,400,'Comment must be 1–500 characters.'); const id=makeId(); const r=await pool.query('INSERT INTO short_comments(id,short_id,user_id,text) SELECT $1,$2,$3,$4 WHERE EXISTS(SELECT 1 FROM shorts WHERE id=$2) RETURNING id,text,created_at',[id,req.params.id,req.session.userId,text]); if(!r.rowCount)return apiError(res,404,'Short not found.'); const u=await findUser(req.session.userId); res.status(201).json({comment:{...r.rows[0],username:u.username}}); }
+  catch(error){next(error)}
+});
+for (const [route, table] of [['like','short_likes'],['favorite','short_favorites'],['repost','short_reposts']]) {
+  app.post(`/api/shorts/:id/${route}`, requireAuth, async (req,res,next)=>{
+    try { const exists=await pool.query('SELECT 1 FROM shorts WHERE id=$1',[req.params.id]); if(!exists.rowCount)return apiError(res,404,'Short not found.');
+      const removed=await pool.query(`DELETE FROM ${table} WHERE short_id=$1 AND user_id=$2 RETURNING short_id`,[req.params.id,req.session.userId]);
+      const active=removed.rowCount===0; if(active)await pool.query(`INSERT INTO ${table}(short_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,[req.params.id,req.session.userId]);
+      res.json({active});
+    } catch(error){next(error)}
+  });
+}
+app.post('/api/users/:id/follow', requireAuth, async (req,res,next)=>{
+  try { if(req.params.id===req.session.userId)return apiError(res,400,'You cannot follow yourself.'); const target=await findUser(req.params.id); if(!target)return apiError(res,404,'User not found.'); const removed=await pool.query('DELETE FROM follows WHERE follower_id=$1 AND followed_id=$2 RETURNING follower_id',[req.session.userId,req.params.id]); const following=removed.rowCount===0; if(following)await pool.query('INSERT INTO follows(follower_id,followed_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[req.session.userId,req.params.id]); res.json({following}); }
+  catch(error){next(error)}
+});
+app.get('/api/profile/:username', requireAuth, async (req,res,next)=>{
+  try { const u=await pool.query('SELECT id,username,created_at FROM users WHERE username=$1',[cleanUsername(req.params.username)]); if(!u.rowCount)return apiError(res,404,'Profile not found.'); const user=u.rows[0], viewer=req.session.userId;
+    const [counts, followState, posts, favorites, reposts, followers, followingList]=await Promise.all([
+      pool.query(`SELECT (SELECT COUNT(*)::int FROM follows WHERE followed_id=$1) followers,(SELECT COUNT(*)::int FROM follows WHERE follower_id=$1) following,(SELECT COUNT(*)::int FROM shorts WHERE user_id=$1) posts,(SELECT COUNT(*)::int FROM short_favorites f JOIN shorts s ON s.id=f.short_id WHERE f.user_id=$1) favorites,(SELECT COUNT(*)::int FROM short_reposts WHERE user_id=$1) reposts`,[user.id]),
+      pool.query('SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id=$1 AND followed_id=$2) following',[viewer,user.id]),
+      pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id user_id,u.username,(SELECT COUNT(*)::int FROM short_likes WHERE short_id=s.id) likes,(SELECT COUNT(*)::int FROM short_comments WHERE short_id=s.id) comments,(SELECT COUNT(*)::int FROM short_reposts WHERE short_id=s.id) reposts,EXISTS(SELECT 1 FROM short_likes WHERE short_id=s.id AND user_id=$2) liked,EXISTS(SELECT 1 FROM short_favorites WHERE short_id=s.id AND user_id=$2) favorited,EXISTS(SELECT 1 FROM short_reposts WHERE short_id=s.id AND user_id=$2) reposted FROM shorts s JOIN users u ON u.id=s.user_id WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 100`,[user.id,viewer]),
+      pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id user_id,u.username,(SELECT COUNT(*)::int FROM short_likes WHERE short_id=s.id) likes,(SELECT COUNT(*)::int FROM short_comments WHERE short_id=s.id) comments,(SELECT COUNT(*)::int FROM short_reposts WHERE short_id=s.id) reposts,EXISTS(SELECT 1 FROM short_likes WHERE short_id=s.id AND user_id=$2) liked,EXISTS(SELECT 1 FROM short_favorites WHERE short_id=s.id AND user_id=$2) favorited,EXISTS(SELECT 1 FROM short_reposts WHERE short_id=s.id AND user_id=$2) reposted FROM short_favorites f JOIN shorts s ON s.id=f.short_id JOIN users u ON u.id=s.user_id WHERE f.user_id=$1 ORDER BY f.created_at DESC LIMIT 100`,[user.id,viewer]),
+      pool.query(`SELECT s.id,s.video_url,s.caption,s.created_at,u.id user_id,u.username,(SELECT COUNT(*)::int FROM short_likes WHERE short_id=s.id) likes,(SELECT COUNT(*)::int FROM short_comments WHERE short_id=s.id) comments,(SELECT COUNT(*)::int FROM short_reposts WHERE short_id=s.id) reposts,EXISTS(SELECT 1 FROM short_likes WHERE short_id=s.id AND user_id=$2) liked,EXISTS(SELECT 1 FROM short_favorites WHERE short_id=s.id AND user_id=$2) favorited,EXISTS(SELECT 1 FROM short_reposts WHERE short_id=s.id AND user_id=$2) reposted FROM short_reposts r JOIN shorts s ON s.id=r.short_id JOIN users u ON u.id=s.user_id WHERE r.user_id=$1 ORDER BY r.created_at DESC LIMIT 100`,[user.id,viewer]),
+      pool.query(`SELECT u.id,u.username,EXISTS(SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followed_id=u.id) following FROM follows f JOIN users u ON u.id=f.follower_id WHERE f.followed_id=$1 ORDER BY f.created_at DESC LIMIT 200`,[user.id,viewer]),
+      pool.query(`SELECT u.id,u.username,EXISTS(SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followed_id=u.id) following FROM follows f JOIN users u ON u.id=f.followed_id WHERE f.follower_id=$1 ORDER BY f.created_at DESC LIMIT 200`,[user.id,viewer])
+    ]);
+    res.json({profile:{id:user.id,username:user.username,createdAt:user.created_at,isMe:user.id===viewer,isFollowing:followState.rows[0].following,...counts.rows[0]},posts:posts.rows,favorites:favorites.rows,reposts:reposts.rows,followers:followers.rows,followingList:followingList.rows});
+  }catch(error){next(error)}
+});
+app.get('/api/live', requireAuth, async (_req,res,next)=>{try{const r=await pool.query(`SELECT l.id,l.title,l.started_at,u.id user_id,u.username FROM live_streams l JOIN users u ON u.id=l.user_id WHERE l.status='live' ORDER BY l.started_at DESC LIMIT 50`);res.json({streams:r.rows,enabled:liveKitReady})}catch(e){next(e)}});
+app.post('/api/live/start', requireAuth, async (req,res,next)=>{try{if(!liveKitReady)return apiError(res,503,'Livestreaming is not configured yet. Add the LiveKit environment variables first.');const title=String(req.body.title||'').trim().slice(0,100);if(title.length<3)return apiError(res,400,'Stream title must be at least 3 characters.');const id=makeId(),roomName='vibe-live-'+id;const r=await pool.query(`INSERT INTO live_streams(id,user_id,room_name,title) VALUES($1,$2,$3,$4) RETURNING id,title`,[id,req.session.userId,roomName,title]);res.status(201).json({stream:r.rows[0]});}catch(e){next(e)}});
+app.post('/api/live/:id/token', requireAuth, async (req,res,next)=>{try{if(!liveKitReady)return apiError(res,503,'Livestreaming is not configured yet.');const r=await pool.query(`SELECT l.*,u.username FROM live_streams l JOIN users u ON u.id=l.user_id WHERE l.id=$1 AND l.status='live'`,[req.params.id]);const stream=r.rows[0];if(!stream)return apiError(res,404,'This livestream has ended.');const isHost=stream.user_id===req.session.userId;const at=new AccessToken(LIVEKIT_API_KEY,LIVEKIT_API_SECRET,{identity:req.session.userId, name: (await findUser(req.session.userId)).username, ttl:'2h'});at.addGrant({roomJoin:true,room:stream.room_name,canPublish:isHost,canSubscribe:true,canPublishData:true});const token=await at.toJwt();res.json({token,url:LIVEKIT_URL,isHost,title:stream.title,username:stream.username});}catch(e){next(e)}});
+app.post('/api/live/:id/end', requireAuth, async (req,res,next)=>{try{const r=await pool.query(`UPDATE live_streams SET status='ended',ended_at=NOW() WHERE id=$1 AND user_id=$2 AND status='live' RETURNING id`,[req.params.id,req.session.userId]);if(!r.rowCount)return apiError(res,404,'Live stream not found or you are not its host.');res.json({ok:true});}catch(e){next(e)}});
 
 const onlineUsers = new Map();
 function emitPresence() { io.emit('presence:update', [...onlineUsers.keys()].map(userId => ({ userId, online: true }))); }

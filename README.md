@@ -1,70 +1,94 @@
-# VIBE Online
+# VIBE — Social video, live streaming and messaging
 
-A real-time web-app starter with account registration, private messages, group chats, online presence, browser-to-browser voice/video call signalling, and local audio playback.
+VIBE is a Node.js/Express + PostgreSQL application with real-time messaging, creator profiles, short videos, likes, comments, reposts, favourites, follows and live video rooms.
+
+## What this update adds
+
+- Replaces the old demo Shorts cards with a PostgreSQL-backed Shorts feed.
+- Record a Short in the browser (up to 60 seconds) or upload an MP4, WebM or MOV file (maximum 100 MB).
+- Like, comment on, repost and favourite Shorts.
+- Follow and unfollow creators.
+- Profiles show posts, followers, following, favourites and reposts, with lists of followers/following.
+- Replaces the old Library navigation item with Profile.
+- Adds a Streaming page where a creator can start/end a livestream and other signed-in users can watch.
+- Uses LiveKit (WebRTC SFU) for live audio/video and Cloudflare R2 for persistent video-file storage.
 
 ## Requirements
-- Node.js 20 or newer
-- A modern browser
 
-## Run locally
-1. Extract this folder.
-2. Open a terminal in `vibe-online`.
-3. Install dependencies: `npm install`
-4. Copy `.env.example` to `.env`.
-   - Windows Command Prompt: `copy .env.example .env`
-   - macOS/Linux: `cp .env.example .env`
-5. Edit `.env` and set `SESSION_SECRET` to a long random string (32+ characters).
-6. Start the server: `npm start`
-7. Open http://localhost:3000
+- Node.js 20 or later
+- PostgreSQL
+- A LiveKit Cloud project (for livestreaming)
+- A Cloudflare R2 bucket with a public custom domain (for persistent Shorts video files)
 
-Data is stored in `data/db.json` and is created automatically.
+## Environment variables
 
-## Test between accounts/devices
-1. Create an account in one browser.
-2. Open a private/incognito window or another browser/device and create another account.
-3. From the first account, use Find people to search for the second account's username.
-4. Start a chat and send messages. Messages are saved on the server and delivered in real time using Socket.IO.
-5. To test calls, both users must be in a direct chat. Allow microphone/camera permissions.
+Keep all secrets in Render Environment, never in GitHub.
 
-## What works in this starter
-- Registration and login with bcrypt password hashing
-- Session-cookie authentication
-- Persistent JSON database for users, conversations and messages
-- Private chats and groups (up to 50 members)
-- Real-time messaging and online status via Socket.IO
-- One-to-one WebRTC voice/video call signalling
-- Audio files selected and played locally in the browser
-- Responsive VIBE interface
+Required for the app:
 
-## Important limitations before public launch
-- This is a starter, not a production-audited service.
-- The included JSON file database is appropriate only for a small prototype. Use PostgreSQL or another production database for multiple server instances.
-- The default session store is Express MemoryStore. Replace it with Redis or a persistent session store before public deployment.
-- For deployment, use HTTPS/WSS, set a strong `SESSION_SECRET`, configure a TURN server for calls across restrictive networks, add rate limiting and email verification, CSRF protection for state-changing routes, content moderation/reporting, abuse prevention, backups, and privacy/terms pages.
-- The included STUN server is not enough for every network. Calls may fail without a TURN server.
-- Calls are one-to-one only; group voice/video calling is not implemented.
-- Audio files are never uploaded or shared. No commercial music/video catalogue is included. You must obtain rights for any media you stream publicly.
-- There is no password reset or account deletion workflow yet.
-- Do not use real or sensitive passwords while testing this starter.
+- `DATABASE_URL` — Render PostgreSQL **Internal Database URL**
+- `SESSION_SECRET` — random private string of at least 32 characters
+- `NODE_ENV=production`
 
-## Hosting
-Deploy the Node app to a host that supports long-lived WebSocket connections. Configure the environment variables there and enable HTTPS. Do not publish `.env` or the `data` directory. See the hosting provider's current Node.js deployment guide.
+Required for Shorts uploads and playback (Cloudflare R2):
 
-## Health check
-Visit `/api/health` while the server is running. It should return JSON with `ok: true`.
+- `R2_ACCOUNT_ID` — Cloudflare account ID
+- `R2_ACCESS_KEY_ID` — R2 API token access key ID
+- `R2_SECRET_ACCESS_KEY` — R2 API token secret
+- `R2_BUCKET` — exact R2 bucket name
+- `R2_PUBLIC_BASE_URL` — public custom domain for the bucket, e.g. `https://media.yourdomain.com` (no trailing slash)
 
-## PostgreSQL deployment update
+Required for live streaming (LiveKit):
 
-The server now requires PostgreSQL and a persistent session store. On Render:
+- `LIVEKIT_URL` — LiveKit server URL beginning with `wss://`
+- `LIVEKIT_API_KEY` — LiveKit API key
+- `LIVEKIT_API_SECRET` — LiveKit API secret
 
-1. Add `DATABASE_URL` to the VIBE web service using the database's **Internal Database URL** (the web service and database must be in the same region).
-2. Set `SESSION_SECRET` to a unique random secret of at least 32 characters. Keep it private and do not commit it to Git.
-3. Set `NODE_ENV=production`.
-4. Push this updated project to the GitHub branch connected to the Render web service. Render will install the new dependencies and deploy.
-5. After deployment, open `/api/health`. A successful response includes `"database":"connected"`.
+The LiveKit secret stays on the server. The browser receives short-lived room tokens with publishing permission only for the stream owner.
 
-The app creates its PostgreSQL tables automatically on startup. User accounts, conversations, messages, and sessions created after this update are stored in PostgreSQL. **Existing accounts and messages in the old `data/db.json` file are not automatically imported**; arrange a proper migration before replacing a live app that contains data you need to keep.
+## Cloudflare R2 setup for Shorts
 
-For local development, set `DATABASE_URL` to a PostgreSQL connection string and set `SESSION_SECRET` in your local `.env` file. Never upload `.env` or share database credentials.
+1. Create an R2 bucket in Cloudflare.
+2. Create an R2 API token with object read/write access only to this bucket.
+3. Connect a public custom domain to the bucket. Set that URL as `R2_PUBLIC_BASE_URL`.
+4. In the bucket's CORS settings, allow your VIBE origin (for example `https://vibe-online.onrender.com`) with method `PUT`, and allow the `Content-Type` request header. Allow `GET` and `HEAD` for playback if the CORS editor asks for read methods too.
+5. Add all five R2 variables to the Render web service Environment page, then save.
 
-This is a security-improvement step, not a claim of OWASP compliance. Rate limiting, CSRF protection, broader validation, security testing, and a review of the remaining features still need to be completed.
+Do not put R2 keys in the browser or in the GitHub repository. Uploaded clips are public to anyone who has the video URL; do not upload private or sensitive recordings.
+
+## LiveKit setup for Streaming
+
+1. Create a LiveKit project and copy its WebSocket URL, API key and API secret.
+2. Add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` to the Render web service Environment page.
+3. Save the environment changes and wait for Render to redeploy.
+
+VIBE creates a room record in PostgreSQL. Live audio/video is transported by LiveKit's SFU, not by the Render web server. Live streams are not recorded or saved as replays by this version.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env
+npm start
+```
+
+Set the variables in `.env` before starting. On Windows, copy `.env.example` to `.env` manually if `cp` is unavailable.
+
+## Deploying to Render
+
+1. Upload/commit the complete project, including the entire `public` folder, to the GitHub branch connected to Render.
+2. Confirm `DATABASE_URL` and `SESSION_SECRET` are present in the Render web service Environment page.
+3. Add the R2 and LiveKit environment variables to enable video uploads and livestreaming.
+4. Wait for the deploy to show **Live**.
+5. Test with two separate accounts and browsers/devices.
+
+The database tables are created automatically at startup. Existing VIBE accounts and conversations remain in PostgreSQL. Old local JSON data is not imported.
+
+## Important limitations and launch checks
+
+- R2 and LiveKit are external services and need their own account setup and credentials. The Streaming page and upload controls show setup-required messages until those variables are configured.
+- LiveKit handles live delivery; this version does not create livestream replays.
+- R2 video files are public through the configured public domain. Add moderation, reporting, deletion workflows, upload scanning and content rules before opening the service broadly.
+- Configure R2 CORS exactly for the deployed VIBE origin.
+- Test upload, playback, live publish/watch/end, follow/unfollow, comments, likes, favourites and reposts with multiple accounts before launch.
+- This is a development update, not a security certification or a guarantee of OWASP compliance. Review privacy, moderation, abuse reporting, retention, rate limits and account recovery before public release.
