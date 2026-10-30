@@ -124,9 +124,10 @@ function appendMessage(m) {
   const host = $('messagesList'); if (host.querySelector('[data-message-id="' + CSS.escape(m.id) + '"]')) return;
   const el = document.createElement('div'); el.className = 'msg' + (m.senderId === me.id ? ' mine' : ''); el.dataset.messageId = m.id;
   const time = new Date(m.createdAt);
-  el.innerHTML = (m.senderId === me.id ? '' : '<div class="who">' + esc(m.sender || 'user') + '</div>') + '<div class="bubble">' + esc(m.text) + '</div><time>' + (Number.isNaN(time.getTime()) ? '' : time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time>';
+  el.innerHTML = (m.senderId === me.id ? '' : '<button class="who dm-profile-link" data-profile="' + esc(m.sender || 'user') + '">@' + esc(m.sender || 'user') + '</button>') + '<div class="bubble">' + esc(m.text) + '</div><time>' + (Number.isNaN(time.getTime()) ? '' : time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time>';
   host.appendChild(el); host.scrollTop = host.scrollHeight;
 }
+$('messagesList').addEventListener('click', e => { const profile=e.target.closest('[data-profile]'); if(profile){loadProfile(profile.dataset.profile).then(()=>navigate('profile')).catch(err=>toast(err.message));} });
 $('messageForm').addEventListener('submit', e => {
   e.preventDefault(); const text = $('messageText').value.trim();
   if (!text || !activeConversation || !socket?.connected) return toast('Connect to live chat before sending.');
@@ -267,38 +268,15 @@ function renderShorts(items,host){
   if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
   items.forEach(item=>{
     const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
-    card.innerHTML=`<video src="${esc(item.video_url)}" controls playsinline preload="metadata"></video><div class="short-post-body"><div class="short-author"><div class="avatar">${esc(item.username.slice(0,2).toUpperCase())}</div><button data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_owner?'<button class="delete-short" data-action="delete" title="Delete your Short">Delete</button>':''}</div><p class="short-caption">${esc(item.caption||'')}</p><div class="short-actions-row"><button data-action="like" class="${item.liked?'selected':''}">♥ ${Number(item.likes)||0}</button><button data-action="comment">Comment · ${Number(item.comments)||0}</button><button data-action="repost" class="${item.reposted?'selected':''}">↻ ${Number(item.reposts)||0}</button><button data-action="favorite" class="${item.favorited?'selected':''}">★ Save</button></div></div>`;
+    card.innerHTML=`<video src="${esc(item.video_url)}" controls playsinline preload="metadata"></video><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
     host.appendChild(card);
   });
-  if(host.id==='shortFeed') observeShortVideos(host);
-}
-let shortVideoObserver;
-function observeShortVideos(host){
-  if(!('IntersectionObserver' in window)) return;
-  if(!shortVideoObserver){
-    shortVideoObserver = new IntersectionObserver(entries=>{
-      entries.forEach(entry=>{
-        const video=entry.target.querySelector('video');
-        if(!video) return;
-        if(entry.isIntersecting) video.play().catch(()=>{});
-        else video.pause();
-      });
-    },{root:host,threshold:0.7});
-  }
-  host.querySelectorAll('.short-post').forEach(card=>shortVideoObserver.observe(card));
 }
 async function handleShortAction(e){
   const profile=e.target.closest('[data-profile]'); if(profile){await loadProfile(profile.dataset.profile);navigate('profile');return;}
+  const follow=e.target.closest('[data-follow-creator]'); if(follow){try{const r=await api(`/api/users/${follow.dataset.followCreator}/follow`,{method:'POST'});follow.textContent=r.following?'Following':'+ Follow';follow.classList.toggle('following',r.following);const card=follow.closest('[data-short-id]');if(card){const item=(await api('/api/shorts')).shorts.find(x=>x.id===card.dataset.shortId);if(item){follow.textContent=item.is_following?'Following':'+ Follow';}}}catch(err){toast(err.message)}return;}
   const btn=e.target.closest('[data-action]'); if(!btn)return; const card=btn.closest('[data-short-id]');if(!card)return;const id=card.dataset.shortId,action=btn.dataset.action;
   try{
-    if(action==='delete'){
-      if(!confirm('Delete this Short from VIBE? This cannot be undone.')) return;
-      await api(`/api/shorts/${id}`,{method:'DELETE'});
-      card.remove();
-      if(!$('shortFeed').querySelector('[data-short-id]')) $('shortFeed').innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';
-      toast('Short deleted from VIBE.');
-      return;
-    }
     if(action==='comment'){const data=await api(`/api/shorts/${id}/comments`);const comments=data.comments.map(c=>`<div class="comment-line"><strong>@${esc(c.username)}</strong>${esc(c.text)}</div>`).join('')||'<p>No comments yet.</p>';openModal(`<h2>Comments</h2><div>${comments}</div><label>Add a comment<input id="newShortComment" maxlength="500" placeholder="Write something kind…"></label><button id="sendShortComment" class="primary">Post comment</button>`);$('sendShortComment').addEventListener('click',async()=>{try{await api(`/api/shorts/${id}/comments`,{method:'POST',body:JSON.stringify({text:$('newShortComment').value})});closeModal();await loadShorts();}catch(err){toast(err.message)}});return;}
     const result=await api(`/api/shorts/${id}/${action}`,{method:'POST'});btn.classList.toggle('selected',result.active);if(action==='like')btn.innerHTML=`♥ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else if(action==='repost')btn.textContent=`↻ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else btn.textContent=result.active?'★ Saved':'★ Save';
   }catch(err){toast(err.message)}
@@ -335,7 +313,7 @@ async function loadProfile(username){
 function renderPeople(people,host){host.innerHTML='';if(!people?.length){host.innerHTML='<div class="empty-state compact">No users to show yet.</div>';return;}people.forEach(u=>{const row=document.createElement('div');row.className='track-row';row.innerHTML=`<div class="avatar">${esc(u.username.slice(0,2).toUpperCase())}</div><div class="track-title"><strong>@${esc(u.username)}</strong></div><button class="smallbtn" data-profile="${esc(u.username)}">View profile</button>${u.id===me.id?'':`<button class="smallbtn" data-follow-user="${esc(u.id)}">${u.following?'Following':'Follow'}</button>`}`;host.appendChild(row)});}
 function renderProfile(){
   if(!profileData)return;const p=profileData.profile;const host=$('profilePanel');host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar">${esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${p.posts}</strong><span>Posts</span></div><div><strong>${p.followers}</strong><span>Followers</span></div><div><strong>${p.following}</strong><span>Following</span></div><div><strong>${p.favorites}</strong><span>Favourites</span></div><div><strong>${p.reposts}</strong><span>Reposts</span></div></div><div class="profile-tabs"><button data-profile-tab="posts" class="${profileTab==='posts'?'active':''}">Posts</button><button data-profile-tab="favorites" class="${profileTab==='favorites'?'active':''}">Favourites</button><button data-profile-tab="reposts" class="${profileTab==='reposts'?'active':''}">Reposts</button><button data-profile-tab="followers" class="${profileTab==='followers'?'active':''}">Followers</button><button data-profile-tab="followingList" class="${profileTab==='followingList'?'active':''}">Following</button></div><div id="profileShorts" class="short-feed"></div>`;
-  if(['posts','favorites','reposts'].includes(profileTab)) renderShorts(profileData[profileTab],$('profileShorts')); else renderPeople(profileData[profileTab],$('profileShorts'));
+  if(['posts','favorites','reposts'].includes(profileTab)) renderShorts(profileData[profileTab].map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing})),$('profileShorts')); else renderPeople(profileData[profileTab],$('profileShorts'));
   host.querySelectorAll('[data-follow-user]').forEach(b=>b.addEventListener('click',async()=>{try{await api(`/api/users/${b.dataset.followUser}/follow`,{method:'POST'});await loadProfile(p.username)}catch(e){toast(e.message)}}));
   host.querySelectorAll('[data-profile-tab]').forEach(b=>b.addEventListener('click',()=>{profileTab=b.dataset.profileTab;renderProfile()}));
   if(!p.isMe)$('toggleFollow').onclick=async()=>{try{const r=await api(`/api/users/${p.id}/follow`,{method:'POST'});p.isFollowing=r.following;p.followers=Math.max(0,Number(p.followers)+(r.following?1:-1));renderProfile()}catch(e){toast(e.message)}};
