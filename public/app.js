@@ -4,6 +4,8 @@ const $ = id => document.getElementById(id);
 let authMode = 'login', me = null, socket = null, conversations = [], activeConversation = null;
 let peer = null, localStream = null, currentCall = null, pendingInvite = null, muted = false, cameraOff = false;
 let presence = new Set(), audioUrls = [];
+let liveRoom = null, activeLiveId = null, liveIsHost = false, liveMicOff = false, liveCamOff = false, shortRecorder = null, shortRecordStream = null, shortRecordChunks = [];
+let profileData = null, profileTab = 'posts';
 const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // Add a TURN server for reliable cross-network calls.
 async function api(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
@@ -93,8 +95,11 @@ function renderConversations() {
 function navigate(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-  $('viewTitle').textContent = ({home:'Good vibes only.',messages:'Your conversations.',music:'Turn it up.',shorts:'Little moments. Big vibes.',library:'Your space.'})[view] || 'VIBE';
+  $('viewTitle').textContent = ({home:'Good vibes only.',messages:'Your conversations.',music:'Turn it up.',streaming:'VIBE Live.',shorts:'Little moments. Big vibes.',profile:'Your profile.'})[view] || 'VIBE';
   if (view === 'messages') loadConversations().catch(e => toast(e.message));
+  if (view === 'shorts') loadShorts().catch(e => toast(e.message));
+  if (view === 'streaming') loadLiveStreams().catch(e => toast(e.message));
+  if (view === 'profile') loadProfile(me.username).catch(e => toast(e.message));
 }
 document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.view)));
 document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.goto)));
@@ -245,5 +250,85 @@ $('trackList').addEventListener('click',e=>{
 });
 function playLocal(i) { const t=playlist[i]; if(!t)return;currentAudioIndex=i;$('audio').src=t.url;$('audio').play().catch(()=>toast('Press play on the audio player to start playback.'));$('trackName').textContent=t.name;$('trackMeta').textContent='Local file · not uploaded'; }
 $('audio').addEventListener('ended',()=>{if(currentAudioIndex>=0&&currentAudioIndex+1<playlist.length)playLocal(currentAudioIndex+1)});
+
+// ---- Creator profiles and Shorts ----
+async function loadShorts(){
+  const data=await api('/api/shorts'); renderShorts(data.shorts,$('shortFeed'));
+}
+function renderShorts(items,host){
+  host.innerHTML='';
+  if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
+  items.forEach(item=>{
+    const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
+    card.innerHTML=`<video src="${esc(item.video_url)}" controls playsinline preload="metadata"></video><div class="short-post-body"><div class="short-author"><div class="avatar">${esc(item.username.slice(0,2).toUpperCase())}</div><button data-profile="${esc(item.username)}">@${esc(item.username)}</button></div><p class="short-caption">${esc(item.caption||'')}</p><div class="short-actions-row"><button data-action="like" class="${item.liked?'selected':''}">♥ ${Number(item.likes)||0}</button><button data-action="comment">Comment · ${Number(item.comments)||0}</button><button data-action="repost" class="${item.reposted?'selected':''}">↻ ${Number(item.reposts)||0}</button><button data-action="favorite" class="${item.favorited?'selected':''}">★ Save</button></div></div>`;
+    host.appendChild(card);
+  });
+}
+async function handleShortAction(e){
+  const profile=e.target.closest('[data-profile]'); if(profile){await loadProfile(profile.dataset.profile);navigate('profile');return;}
+  const btn=e.target.closest('[data-action]'); if(!btn)return; const card=btn.closest('[data-short-id]');if(!card)return;const id=card.dataset.shortId,action=btn.dataset.action;
+  try{
+    if(action==='comment'){const data=await api(`/api/shorts/${id}/comments`);const comments=data.comments.map(c=>`<div class="comment-line"><strong>@${esc(c.username)}</strong>${esc(c.text)}</div>`).join('')||'<p>No comments yet.</p>';openModal(`<h2>Comments</h2><div>${comments}</div><label>Add a comment<input id="newShortComment" maxlength="500" placeholder="Write something kind…"></label><button id="sendShortComment" class="primary">Post comment</button>`);$('sendShortComment').addEventListener('click',async()=>{try{await api(`/api/shorts/${id}/comments`,{method:'POST',body:JSON.stringify({text:$('newShortComment').value})});closeModal();await loadShorts();}catch(err){toast(err.message)}});return;}
+    const result=await api(`/api/shorts/${id}/${action}`,{method:'POST'});btn.classList.toggle('selected',result.active);if(action==='like')btn.innerHTML=`♥ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else if(action==='repost')btn.textContent=`↻ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else btn.textContent=result.active?'★ Saved':'★ Save';
+  }catch(err){toast(err.message)}
+}
+$('shortFeed').addEventListener('click',handleShortAction);
+$('profilePanel').addEventListener('click',handleShortAction);
+async function uploadShort(file,caption){
+  if(!file||!file.type.startsWith('video/'))throw new Error('Choose a video file.');
+  if(file.size>100*1024*1024)throw new Error('Videos must be smaller than 100 MB.');
+  const contentType=file.type.startsWith('video/webm')?'video/webm':file.type.startsWith('video/mp4')?'video/mp4':file.type.startsWith('video/quicktime')?'video/quicktime':file.type;
+  const signed=await api('/api/shorts/upload-url',{method:'POST',body:JSON.stringify({contentType,size:file.size})});
+  const put=await fetch(signed.uploadUrl,{method:'PUT',headers:{'Content-Type':contentType},body:file});if(!put.ok)throw new Error('Video upload failed. Check video storage setup and try again.');
+  await api('/api/shorts',{method:'POST',body:JSON.stringify({key:signed.key,videoUrl:signed.videoUrl,caption})});await loadShorts();toast('Your Short has been posted.');
+}
+$('shortUpload').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;const caption=prompt('Add a caption for your Short (optional):')||'';try{await uploadShort(file,caption)}catch(err){toast(err.message)}});
+$('recordShort').addEventListener('click',async()=>{
+  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast('Video recording is not supported in this browser.');
+  try{
+    shortRecordStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:true});
+    const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];const mimeType=types.find(t=>MediaRecorder.isTypeSupported(t));
+    shortRecorder=new MediaRecorder(shortRecordStream,mimeType?{mimeType}:undefined);shortRecordChunks=[];
+    openModal('<h2>Record a Short</h2><p>Record up to 60 seconds. Make sure everyone shown has agreed to be recorded.</p><video id="recordPreview" class="recording-preview" autoplay muted playsinline></video><div class="short-actions"><button id="beginRecording" class="primary">Start recording</button><button id="stopRecording" class="danger" disabled>Stop & preview</button></div><p id="recordStatus" class="fine">Camera ready.</p>');$('recordPreview').srcObject=shortRecordStream;
+    $('beginRecording').onclick=()=>{shortRecorder.start();$('beginRecording').disabled=true;$('stopRecording').disabled=false;$('recordStatus').textContent='Recording… it will stop automatically after 60 seconds.';setTimeout(()=>{if(shortRecorder?.state==='recording')shortRecorder.stop()},60000)};
+    $('stopRecording').onclick=()=>{if(shortRecorder?.state==='recording')shortRecorder.stop()};
+    shortRecorder.ondataavailable=e=>{if(e.data.size)shortRecordChunks.push(e.data)};
+    shortRecorder.onstop=async()=>{shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;const type=shortRecorder.mimeType||'video/webm';const blob=new Blob(shortRecordChunks,{type});const file=new File([blob],`vibe-short-${Date.now()}.${type.includes('mp4')?'mp4':'webm'}`,{type});closeModal();const caption=prompt('Add a caption for your Short (optional):')||'';try{await uploadShort(file,caption)}catch(err){toast(err.message)}};
+  }catch(err){shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;toast('Camera access was not available. Allow camera and microphone access on the secure website.');}
+});
+async function loadProfile(username){
+  const data=await api('/api/profile/'+encodeURIComponent(username));profileData=data;profileTab='posts';renderProfile();
+}
+function renderPeople(people,host){host.innerHTML='';if(!people?.length){host.innerHTML='<div class="empty-state compact">No users to show yet.</div>';return;}people.forEach(u=>{const row=document.createElement('div');row.className='track-row';row.innerHTML=`<div class="avatar">${esc(u.username.slice(0,2).toUpperCase())}</div><div class="track-title"><strong>@${esc(u.username)}</strong></div><button class="smallbtn" data-profile="${esc(u.username)}">View profile</button>${u.id===me.id?'':`<button class="smallbtn" data-follow-user="${esc(u.id)}">${u.following?'Following':'Follow'}</button>`}`;host.appendChild(row)});}
+function renderProfile(){
+  if(!profileData)return;const p=profileData.profile;const host=$('profilePanel');host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar">${esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${p.posts}</strong><span>Posts</span></div><div><strong>${p.followers}</strong><span>Followers</span></div><div><strong>${p.following}</strong><span>Following</span></div><div><strong>${p.favorites}</strong><span>Favourites</span></div><div><strong>${p.reposts}</strong><span>Reposts</span></div></div><div class="profile-tabs"><button data-profile-tab="posts" class="${profileTab==='posts'?'active':''}">Posts</button><button data-profile-tab="favorites" class="${profileTab==='favorites'?'active':''}">Favourites</button><button data-profile-tab="reposts" class="${profileTab==='reposts'?'active':''}">Reposts</button><button data-profile-tab="followers" class="${profileTab==='followers'?'active':''}">Followers</button><button data-profile-tab="followingList" class="${profileTab==='followingList'?'active':''}">Following</button></div><div id="profileShorts" class="short-feed"></div>`;
+  if(['posts','favorites','reposts'].includes(profileTab)) renderShorts(profileData[profileTab],$('profileShorts')); else renderPeople(profileData[profileTab],$('profileShorts'));
+  host.querySelectorAll('[data-follow-user]').forEach(b=>b.addEventListener('click',async()=>{try{await api(`/api/users/${b.dataset.followUser}/follow`,{method:'POST'});await loadProfile(p.username)}catch(e){toast(e.message)}}));
+  host.querySelectorAll('[data-profile-tab]').forEach(b=>b.addEventListener('click',()=>{profileTab=b.dataset.profileTab;renderProfile()}));
+  if(!p.isMe)$('toggleFollow').onclick=async()=>{try{const r=await api(`/api/users/${p.id}/follow`,{method:'POST'});p.isFollowing=r.following;p.followers=Math.max(0,Number(p.followers)+(r.following?1:-1));renderProfile()}catch(e){toast(e.message)}};
+}
+
+// ---- Live video rooms (LiveKit SFU) ----
+let liveKitModule=null;
+async function getLiveKit(){if(!liveKitModule)liveKitModule=await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.6/dist/livekit-client.esm.mjs');return liveKitModule;}
+async function loadLiveStreams(){const data=await api('/api/live');const host=$('liveGrid');host.innerHTML='';if(!data.enabled){host.innerHTML='<div class="tile"><h3>Livestreaming setup required</h3><p>Connect LiveKit credentials to enable live video. The setup steps are in the updated project README.</p></div>';return;}if(!data.streams.length){host.innerHTML='<div class="empty-state compact">Nobody is live right now. Start the first stream.</div>';return;}data.streams.forEach(s=>{const card=document.createElement('article');card.className='live-card';card.innerHTML=`<span class="live-pill">LIVE</span><h3>${esc(s.title)}</h3><p>Hosted by @${esc(s.username)}</p><button class="primary" data-watch-live="${esc(s.id)}">Watch live →</button>`;host.appendChild(card)});}
+$('refreshLives').addEventListener('click',()=>loadLiveStreams().catch(e=>toast(e.message)));
+$('startLive').addEventListener('click',()=>{openModal('<h2>Start a livestream</h2><p>Choose a clear title. Your camera and microphone will be shared with viewers while you are live.</p><label>Stream title<input id="liveTitleInput" maxlength="100" placeholder="Chilling with the VIBE community"></label><button id="confirmStartLive" class="primary">Go live</button>');$('confirmStartLive').onclick=async()=>{try{const data=await api('/api/live/start',{method:'POST',body:JSON.stringify({title:$('liveTitleInput').value})});closeModal();await joinLive(data.stream.id,true)}catch(e){toast(e.message)}}});
+$('liveGrid').addEventListener('click',e=>{const b=e.target.closest('[data-watch-live]');if(b)joinLive(b.dataset.watchLive,false).catch(err=>toast(err.message))});
+async function joinLive(id,isHost){
+  if(liveRoom)await leaveLive(false);const data=await api(`/api/live/${id}/token`,{method:'POST',body:'{}'});const LK=await getLiveKit();const room=new LK.Room({adaptiveStream:true,dynacast:true});liveRoom=room;activeLiveId=id;liveIsHost=isHost;$('liveStage').classList.remove('hidden');$('liveTitle').textContent=data.title;$('liveMeta').textContent='Hosted by @'+data.username;$('liveVideo').srcObject=null;$('liveControls').classList.toggle('hidden',!isHost);
+  room.on(LK.RoomEvent.TrackSubscribed,(track)=>{if(track.kind==='video'){track.attach($('liveVideo'));}else{const el=track.attach();el.autoplay=true;el.style.display='none';$('liveStage').appendChild(el)}});
+  room.on(LK.RoomEvent.Disconnected,()=>{if(liveRoom===room){liveRoom=null;toast('You left the livestream.')}});
+  await room.connect(data.url,data.token);
+  if(isHost){await room.localParticipant.setCameraEnabled(true);await room.localParticipant.setMicrophoneEnabled(true);const pubs=[...room.localParticipant.videoTrackPublications.values()];if(pubs[0]?.track)pubs[0].track.attach($('liveVideo'));}
+  $('liveStage').scrollIntoView({behavior:'smooth',block:'start'});await loadLiveStreams();
+}
+$('leaveLive').addEventListener('click',()=>leaveLive(true));
+$('endLive').addEventListener('click',async()=>{if(!activeLiveId)return;try{await api(`/api/live/${activeLiveId}/end`,{method:'POST',body:'{}'});await leaveLive(true);await loadLiveStreams();toast('Livestream ended.')}catch(e){toast(e.message)}});
+$('muteLive').addEventListener('click',async()=>{if(!liveRoom)return;liveMicOff=!liveMicOff;await liveRoom.localParticipant.setMicrophoneEnabled(!liveMicOff);$('muteLive').textContent=liveMicOff?'Unmute microphone':'Mute microphone'});
+$('cameraLive').addEventListener('click',async()=>{if(!liveRoom)return;liveCamOff=!liveCamOff;await liveRoom.localParticipant.setCameraEnabled(!liveCamOff);$('cameraLive').textContent=liveCamOff?'Turn camera on':'Turn camera off'});
+async function leaveLive(refresh){if(liveRoom){await liveRoom.disconnect();liveRoom=null;}if(liveIsHost&&activeLiveId){try{await api(`/api/live/${activeLiveId}/end`,{method:'POST',body:'{}'})}catch{}}activeLiveId=null;liveIsHost=false;liveMicOff=false;liveCamOff=false;$('liveVideo').srcObject=null;$('liveStage').classList.add('hidden');if(refresh)loadLiveStreams().catch(()=>{});}
+
+
 checkSession();
 })();
