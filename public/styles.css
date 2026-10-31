@@ -59,3 +59,8 @@
 #view-shorts #shortFeed .short-post{scroll-snap-stop:always;}
 .dm-person-link{position:relative;z-index:2;pointer-events:auto;}
 .dm-person-avatar{flex:0 0 27px;}
+
+/* User-controlled playback and sound; autoplay remains muted for browser compatibility. */
+#shortFeed .short-playback-controls{position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px;}
+#shortFeed .short-playback-controls button{width:42px;height:42px;border:1px solid #ffffff55;border-radius:50%;background:#17131fbb;color:#fff;font-size:19px;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(8px);}
+#shortFeed .short-playback-controls button:focus-visible{outline:2px solid white;outline-offset:3px;}
