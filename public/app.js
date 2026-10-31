@@ -101,7 +101,7 @@ function navigate(view) {
   if (view === 'streaming') loadLiveStreams().catch(e => toast(e.message));
   if (view === 'profile') { const target = profileNavigationTarget || me.username; profileNavigationTarget = null; loadProfile(target).catch(e => toast(e.message)); }
 }
-document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.view)));
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { if (b.dataset.view === 'profile') profileNavigationTarget = null; navigate(b.dataset.view); }));
 document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.goto)));
 $('mobileMenu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('menu-open'));
 function showEmptyChat() { $('chatEmpty').classList.remove('hidden'); $('chatActive').classList.add('hidden'); }
@@ -322,8 +322,11 @@ async function loadProfile(username){
 function renderPeople(people,host){host.innerHTML='';if(!people?.length){host.innerHTML='<div class="empty-state compact">No users to show yet.</div>';return;}people.forEach(u=>{const row=document.createElement('div');row.className='track-row';row.innerHTML=`<div class="avatar">${esc(u.username.slice(0,2).toUpperCase())}</div><div class="track-title"><strong>@${esc(u.username)}</strong></div><button class="smallbtn" data-profile="${esc(u.username)}">View profile</button>${u.id===me.id?'':`<button class="smallbtn" data-follow-user="${esc(u.id)}">${u.following?'Following':'Follow'}</button>`}`;host.appendChild(row)});}
 function renderProfile(){
   if(!profileData)return;const p=profileData.profile;const host=$('profilePanel');
-  host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar">${esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${p.followers}</strong><span>Followers</span></div><div><strong>${p.following}</strong><span>Following</span></div></div><div class="profile-tabs"><button data-profile-tab="posts" class="${profileTab==='posts'?'active':''}">Posts</button><button data-profile-tab="reposts" class="${profileTab==='reposts'?'active':''}">Reposts</button></div><div id="profileShorts" class="short-grid"></div>`;
-  renderShorts(profileData[profileTab].map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing})),$('profileShorts'));
+  const ownTabs=p.isMe?['posts','reposts','liked','favorites']:['posts','reposts'];
+  const tabLabels={posts:'Videos',reposts:'Reposts',liked:'Liked videos',favorites:'Favorites'};
+  if(!ownTabs.includes(profileTab))profileTab='posts';
+  host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar">${esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${Number(p.followers)||0}</strong><span>Followers</span></div><div><strong>${Number(p.following)||0}</strong><span>Following</span></div>${p.isMe?`<div><strong>${Number(p.likes)||0}</strong><span>Likes</span></div>`:''}</div><div class="profile-tabs">${ownTabs.map(tab=>`<button data-profile-tab="${tab}" class="${profileTab===tab?'active':''}">${tabLabels[tab]}</button>`).join('')}</div><div id="profileShorts" class="short-grid"></div>`;
+  renderShorts((profileData[profileTab]||[]).map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing})),$('profileShorts'));
   host.querySelectorAll('[data-profile-tab]').forEach(b=>b.addEventListener('click',()=>{profileTab=b.dataset.profileTab;renderProfile()}));
   if(!p.isMe)$('toggleFollow').onclick=async()=>{try{const r=await api(`/api/users/${p.id}/follow`,{method:'POST'});p.isFollowing=r.following;p.followers=Math.max(0,Number(p.followers)+(r.following?1:-1));renderProfile()}catch(e){toast(e.message)}};
 }
