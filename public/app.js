@@ -5,7 +5,7 @@ let authMode = 'login', me = null, socket = null, conversations = [], activeConv
 let peer = null, localStream = null, currentCall = null, pendingInvite = null, muted = false, cameraOff = false;
 let presence = new Set(), audioUrls = [];
 let liveRoom = null, activeLiveId = null, liveIsHost = false, liveMicOff = false, liveCamOff = false, shortRecorder = null, shortRecordStream = null, shortRecordChunks = [];
-let profileData = null, profileTab = 'posts';
+let profileData = null, profileTab = 'posts', profileNavigationTarget = null, profileRequestSeq = 0;
 const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // Add a TURN server for reliable cross-network calls.
 async function api(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
@@ -99,8 +99,7 @@ function navigate(view) {
   if (view === 'messages') loadConversations().catch(e => toast(e.message));
   if (view === 'shorts') loadShorts().catch(e => toast(e.message));
   if (view === 'streaming') loadLiveStreams().catch(e => toast(e.message));
-  if (view === 'profile' && !profileData) loadProfile(me.username).catch(e => toast(e.message));
-  if (view === 'profile' && profileData) $('viewTitle').textContent = profileData.profile.isMe ? 'Your profile.' : '@' + profileData.profile.username;
+  if (view === 'profile') { const target = profileNavigationTarget || me.username; profileNavigationTarget = null; loadProfile(target).catch(e => toast(e.message)); }
 }
 document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.view)));
 document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.goto)));
@@ -128,7 +127,7 @@ function appendMessage(m) {
   el.innerHTML = (m.senderId === me.id ? '' : '<button type="button" class="dm-person-link" data-profile="' + esc(m.sender || 'user') + '" aria-label="Open @' + esc(m.sender || 'user') + ' profile"><span class="dm-person-avatar">' + esc((m.sender || 'U').slice(0,2).toUpperCase()) + '</span><strong>@' + esc(m.sender || 'user') + '</strong></button>') + '<div class="bubble">' + esc(m.text) + '</div><time>' + (Number.isNaN(time.getTime()) ? '' : time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time>';
   host.appendChild(el); host.scrollTop = host.scrollHeight;
 }
-$('messagesList').addEventListener('click', e => { const profile=e.target.closest('[data-profile]'); if(profile){loadProfile(profile.dataset.profile).then(()=>navigate('profile')).catch(err=>toast(err.message));} });
+$('messagesList').addEventListener('click', e => { const profile=e.target.closest('[data-profile]'); if(profile){openUserProfile(profile.dataset.profile);} });
 $('messageForm').addEventListener('submit', e => {
   e.preventDefault(); const text = $('messageText').value.trim();
   if (!text || !activeConversation || !socket?.connected) return toast('Connect to live chat before sending.');
@@ -274,7 +273,7 @@ function renderShorts(items,host){
   });
 }
 async function handleShortAction(e){
-  const profile=e.target.closest('[data-profile]'); if(profile){await loadProfile(profile.dataset.profile);navigate('profile');return;}
+  const profile=e.target.closest('[data-profile]'); if(profile){openUserProfile(profile.dataset.profile);return;}
   const follow=e.target.closest('[data-follow-creator]'); if(follow){try{const r=await api(`/api/users/${follow.dataset.followCreator}/follow`,{method:'POST'});follow.textContent=r.following?'Following':'+ Follow';follow.classList.toggle('following',r.following);const card=follow.closest('[data-short-id]');if(card){const item=(await api('/api/shorts')).shorts.find(x=>x.id===card.dataset.shortId);if(item){follow.textContent=item.is_following?'Following':'+ Follow';}}}catch(err){toast(err.message)}return;}
   const btn=e.target.closest('[data-action]'); if(!btn)return; const card=btn.closest('[data-short-id]');if(!card)return;const id=card.dataset.shortId,action=btn.dataset.action;
   try{
@@ -308,10 +307,13 @@ $('recordShort').addEventListener('click',async()=>{
     shortRecorder.onstop=async()=>{shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;const type=shortRecorder.mimeType||'video/webm';const blob=new Blob(shortRecordChunks,{type});const file=new File([blob],`vibe-short-${Date.now()}.${type.includes('mp4')?'mp4':'webm'}`,{type});closeModal();const caption=prompt('Add a caption for your Short (optional):')||'';try{await uploadShort(file,caption)}catch(err){toast(err.message)}};
   }catch(err){shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;toast('Camera access was not available. Allow camera and microphone access on the secure website.');}
 });
+function openUserProfile(username){ profileNavigationTarget=String(username||'').trim(); navigate('profile'); }
 async function loadProfile(username){
+  const requestId=++profileRequestSeq;
   const requested=String(username||'').trim();
   if(!requested) throw new Error('Could not identify that VIBE user.');
   const data=await api('/api/profile/'+encodeURIComponent(requested));
+  if(requestId!==profileRequestSeq)return data;
   if(!data?.profile?.username) throw new Error('That profile could not be loaded.');
   profileData=data;profileTab='posts';renderProfile();
   $('viewTitle').textContent=data.profile.isMe?'Your profile.':'@'+data.profile.username;
@@ -329,8 +331,11 @@ function renderProfile(){
 // ---- Live video rooms (LiveKit SFU) ----
 let liveKitModule=null;
 async function getLiveKit(){if(!liveKitModule)liveKitModule=await import('https://cdn.jsdelivr.net/npm/livekit-client@2.9.6/dist/livekit-client.esm.mjs');return liveKitModule;}
-async function loadLiveStreams(){const data=await api('/api/live');const host=$('liveGrid');host.innerHTML='';if(!data.enabled){host.innerHTML='<div class="tile"><h3>Livestreaming setup required</h3><p>Connect LiveKit credentials to enable live video. The setup steps are in the updated project README.</p></div>';return;}if(!data.streams.length){host.innerHTML='<div class="empty-state compact">Nobody is live right now. Start the first stream.</div>';return;}data.streams.forEach(s=>{const card=document.createElement('article');card.className='live-card';card.innerHTML=`<span class="live-pill">LIVE</span><h3>${esc(s.title)}</h3><p>Hosted by @${esc(s.username)}</p><button class="primary" data-watch-live="${esc(s.id)}">Watch live →</button>`;host.appendChild(card)});}
+async function loadLiveStreams(){const data=await api('/api/live');const host=$('liveGrid');host.innerHTML='';if(!data.enabled){host.innerHTML='<div class="tile"><h3>Livestreaming setup required</h3><p>Connect LiveKit credentials to enable live video. The setup steps are in the updated project README.</p></div>';return;}if(!data.streams.length){host.innerHTML='<div class="empty-state compact">Nobody is live right now. Start the first stream.</div>';return;}data.streams.forEach(s=>{const card=document.createElement('article');card.className='live-card';card.innerHTML=`<span class="live-pill">LIVE</span><h3>${esc(s.title)}</h3><p>Hosted by @${esc(s.username)}</p><button class="primary" data-watch-live="${esc(s.id)}">Watch live →</button>`;host.appendChild(card)});await searchLiveCreators();}
+async function searchLiveCreators(){const input=$('liveCreatorSearch');if(!input)return;const term=input.value.trim();const data=await api('/api/live/creators?q='+encodeURIComponent(term));const host=$('liveCreatorResults');host.innerHTML='';if(!data.creators.length){host.innerHTML='<div class="empty-state compact">No past livestream hosts found.</div>';return;}data.creators.forEach(u=>{const card=document.createElement('article');card.className='live-card';card.innerHTML=`<h3>@${esc(u.username)}</h3><p>${Number(u.hosted_count)} livestream${Number(u.hosted_count)===1?'':'s'} hosted</p><button class="smallbtn" data-profile="${esc(u.username)}">View profile</button>`;host.appendChild(card)});}
 $('refreshLives').addEventListener('click',()=>loadLiveStreams().catch(e=>toast(e.message)));
+$('liveCreatorSearch').addEventListener('input',()=>{clearTimeout(window.liveSearchTimer);window.liveSearchTimer=setTimeout(()=>searchLiveCreators().catch(e=>toast(e.message)),250);});
+$('liveCreatorResults').addEventListener('click',e=>{const b=e.target.closest('[data-profile]');if(b)openUserProfile(b.dataset.profile);});
 $('startLive').addEventListener('click',()=>{openModal('<h2>Start a livestream</h2><p>Choose a clear title. Your camera and microphone will be shared with viewers while you are live.</p><label>Stream title<input id="liveTitleInput" maxlength="100" placeholder="Chilling with the VIBE community"></label><button id="confirmStartLive" class="primary">Go live</button>');$('confirmStartLive').onclick=async()=>{try{const data=await api('/api/live/start',{method:'POST',body:JSON.stringify({title:$('liveTitleInput').value})});closeModal();await joinLive(data.stream.id,true)}catch(e){toast(e.message)}}});
 $('liveGrid').addEventListener('click',e=>{const b=e.target.closest('[data-watch-live]');if(b)joinLive(b.dataset.watchLive,false).catch(err=>toast(err.message))});
 async function joinLive(id,isHost){
