@@ -388,3 +388,36 @@ input[type=range]{height:9px!important;border:1px solid rgba(255,255,255,.22)!im
 #view-shorts #shortFeed .short-playback-controls button{width:38px;min-height:38px}
 @media(max-width:700px){#view-shorts.shorts-view{height:auto!important;min-height:0!important;margin:0!important;padding:0!important}#view-shorts #shortFeed{height:auto!important;max-height:none!important;gap:12px;padding:0 0 calc(90px + env(safe-area-inset-bottom))!important}#view-shorts #shortFeed .short-post{width:min(100%, calc((100dvh - 205px)*.5625));max-height:calc(100dvh - 205px);border-radius:19px!important}#view-shorts .shorts-stage{display:block!important}#view-shorts .short-create-corner{margin-bottom:12px}#view-shorts #shortFeed .short-actions-rail{right:7px;bottom:10px}#view-shorts #shortFeed .short-overlay{right:58px;bottom:9px}}
 @media(max-width:390px){#view-shorts #shortFeed .short-post{width:min(100%,calc((100dvh - 185px)*.5625));max-height:calc(100dvh - 185px)}.nav b{width:34px!important;height:34px!important;font-size:22px!important}}
+
+/* VIBE 2026: rebuilt portrait Moments experience and sculpted navigation marks */
+.nav b{display:grid!important;place-items:center!important;font-family:Arial,sans-serif!important;font-size:27px!important;font-weight:1000!important;line-height:1!important;-webkit-text-stroke:1.8px currentColor!important;color:#fff!important;text-shadow:0 1px 0 #fff,0 2px 0 rgba(210,215,230,.8),0 4px 0 rgba(80,85,105,.65),0 7px 13px #0009,0 0 15px #fff5!important;filter:drop-shadow(0 2px 2px #0008)}
+.nav b{background:radial-gradient(circle at 30% 18%,#fff8,transparent 42%),linear-gradient(145deg,#687080,#252a36 58%,#11141c)!important;border:1px solid #ffffff75!important;box-shadow:inset 0 2px 2px #fff9,inset 0 -4px 7px #0008,0 5px 12px #0008!important}
+.nav.active b{background:radial-gradient(circle at 28% 15%,#fff,transparent 45%),linear-gradient(145deg,#fff,#c8d0df 45%,#788398)!important;color:#171b24!important;-webkit-text-stroke:1.5px #171b24!important;box-shadow:inset 0 2px 2px #fff, inset 0 -3px 5px #657086,0 0 0 2px #ffffff40,0 7px 18px #0009!important}
+@media(max-width:700px){
+  #app.app{padding:0!important;min-height:100dvh;}
+  #app .main{padding:0!important;margin:0!important;width:100%;max-width:none;}
+  #view-shorts.shorts-view{position:relative!important;height:100dvh!important;height:100svh!important;min-height:100dvh!important;overflow:hidden!important;margin:0!important;padding:0!important;display:none;}
+  #view-shorts.shorts-view.active{display:flex!important;flex-direction:column!important;}
+  #view-shorts .shorts-heading{flex:0 0 auto!important;min-height:54px!important;margin:0!important;padding:9px 15px 7px!important;align-items:center!important;background:linear-gradient(180deg,#0a0b10f5,#0a0b10b8)!important;z-index:4!important;}
+  #view-shorts .shorts-heading h1{font-size:24px!important;margin:0!important;letter-spacing:-1px!important;}
+  #view-shorts .shorts-heading .eyebrow{font-size:8px!important;}
+  #view-shorts .shorts-heading-note{font-size:8px!important;}
+  #view-shorts .shorts-stage{display:flex!important;flex:1 1 auto!important;min-height:0!important;flex-direction:column!important;gap:0!important;overflow:hidden!important;}
+  #view-shorts #shortFeed{flex:1 1 auto!important;width:100vw!important;max-width:none!important;height:100%!important;max-height:none!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;scroll-snap-type:y mandatory!important;overscroll-behavior-y:contain!important;gap:0!important;padding:0 0 calc(78px + env(safe-area-inset-bottom))!important;margin:0!important;}
+  #view-shorts #shortFeed .short-post{position:relative!important;width:100vw!important;height:calc(100svh - 54px - 78px - env(safe-area-inset-bottom))!important;min-height:0!important;max-height:none!important;aspect-ratio:auto!important;flex:0 0 auto!important;border-radius:0!important;border:0!important;scroll-snap-align:start!important;scroll-snap-stop:always!important;overflow:hidden!important;}
+  #view-shorts #shortFeed .short-post video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:contain!important;background:#050609!important;touch-action:pan-y!important;}
+  #view-shorts #shortFeed .short-overlay{left:15px!important;right:76px!important;bottom:17px!important;z-index:3!important;}
+  #view-shorts #shortFeed .short-actions-rail{right:12px!important;bottom:20px!important;z-index:4!important;gap:12px!important;}
+  #view-shorts #shortFeed .short-actions-rail button{width:48px!important;min-height:48px!important;border-radius:18px!important;font-size:23px!important;}
+  #view-shorts #shortFeed .short-playback-controls{top:14px!important;right:14px!important;z-index:5!important;}
+  #view-shorts #shortFeed .short-playback-controls button{width:42px!important;min-height:42px!important;border-radius:50%!important;}
+  #view-shorts .short-create-corner{position:relative!important;flex:0 0 auto!important;width:auto!important;margin:0 12px 8px!important;padding:12px!important;max-height:145px!important;overflow:auto!important;border-radius:18px!important;}
+  #view-shorts .short-create-corner>strong,#view-shorts .short-create-corner>small{display:none!important;}
+  #view-shorts .short-create-corner .moments-tools{display:flex!important;gap:8px!important;}
+  #view-shorts .short-create-corner .moments-tools>*{flex:1!important;margin:0!important;padding:10px 7px!important;font-size:11px!important;}
+  .sidebar{height:70px!important;bottom:calc(7px + env(safe-area-inset-bottom))!important;left:9px!important;right:9px!important;padding:5px!important;border-radius:23px!important;}
+  .sidebar nav{gap:3px!important;}
+  .nav{height:58px!important;gap:3px!important;font-size:8px!important;}
+  .nav b{width:38px!important;height:38px!important;border-radius:13px!important;font-size:24px!important;}
+}
+@media(max-width:390px){#view-shorts .shorts-heading{min-height:49px!important;padding:7px 12px!important}#view-shorts #shortFeed .short-post{height:calc(100svh - 49px - 72px - env(safe-area-inset-bottom))!important}.nav b{width:35px!important;height:35px!important}}
