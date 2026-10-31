@@ -10,6 +10,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const { Server } = require('socket.io');
 const { AccessToken } = require('livekit-server-sdk');
+const webpush = require('web-push');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,6 +23,10 @@ const CLOUDINARY_UPLOAD_PRESET = process.env.CLOUDINARY_UPLOAD_PRESET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+const pushReady = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+if (pushReady) webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@vibe.example', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 const mediaStorageReady = Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
 const liveKitReady = Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
 
@@ -64,11 +69,11 @@ const makeId = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const cleanUsername = value => String(value || '').trim().toLowerCase();
 const validUsername = value => /^[a-z0-9_]{3,20}$/.test(value);
-const publicUser = user => ({ id: user.id, username: user.username, createdAt: user.created_at });
+const publicUser = user => ({ id: user.id, username: user.username, avatarUrl: user.avatar_url || null, createdAt: user.created_at });
 const apiError = (res, status, error) => res.status(status).json({ error });
 
 async function findUser(id) {
-  const result = await pool.query('SELECT id, username, created_at FROM users WHERE id = $1', [id]);
+  const result = await pool.query('SELECT id, username, avatar_url, created_at FROM users WHERE id = $1', [id]);
   return result.rows[0] || null;
 }
 async function findConversation(id) {
@@ -109,6 +114,7 @@ async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username VARCHAR(20) NOT NULL UNIQUE,
+      avatar_url TEXT,
       password_hash TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -132,6 +138,9 @@ async function initializeDatabase() {
       text VARCHAR(2000) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+    CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, subscription JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(user_id, subscription));
+    CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
     CREATE INDEX IF NOT EXISTS messages_conversation_created_idx ON messages(conversation_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS conversation_members_user_idx ON conversation_members(user_id, conversation_id);
     CREATE TABLE IF NOT EXISTS follows (follower_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, followed_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (follower_id, followed_id), CHECK (follower_id <> followed_id));
@@ -148,6 +157,31 @@ async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS live_streams_status_idx ON live_streams(status,started_at DESC);
   `);
 }
+
+// Profile picture uploads use the existing Cloudinary image preset.
+app.post('/api/avatar/upload-config', requireAuth, async (req, res) => {
+  if (!mediaStorageReady) return apiError(res, 503, 'Image storage is not configured. Add the existing Cloudinary settings in Render.');
+  const type = String(req.body.contentType || ''); const size = Number(req.body.size || 0);
+  if (!['image/jpeg','image/png','image/webp','image/gif'].includes(type)) return apiError(res,400,'Choose a JPG, PNG, WebP or GIF image.');
+  if (!Number.isFinite(size) || size < 1 || size > 5*1024*1024) return apiError(res,400,'Profile pictures must be 5 MB or smaller.');
+  res.json({cloudName:CLOUDINARY_CLOUD_NAME,uploadPreset:CLOUDINARY_UPLOAD_PRESET});
+});
+app.post('/api/avatar', requireAuth, async (req,res,next)=>{
+  try { const url=String(req.body.url||''); let parsed; try{parsed=new URL(url)}catch{return apiError(res,400,'Invalid image URL.')};
+    if(parsed.protocol!=='https:'||parsed.hostname!=='res.cloudinary.com'||!parsed.pathname.startsWith(`/${CLOUDINARY_CLOUD_NAME}/image/upload/`)) return apiError(res,400,'Please upload your picture through VIBE.');
+    const r=await pool.query('UPDATE users SET avatar_url=$1 WHERE id=$2 RETURNING id,username,avatar_url,created_at',[url,req.session.userId]);
+    res.json({user:publicUser(r.rows[0])});
+  }catch(e){next(e)}
+});
+app.get('/api/push/public-key', requireAuth, (_req,res)=>res.json({enabled:pushReady,publicKey:pushReady?VAPID_PUBLIC_KEY:null}));
+app.post('/api/push/subscribe', requireAuth, async (req,res,next)=>{
+  try { if(!pushReady)return apiError(res,503,'Push notifications are not configured on this VIBE server yet.'); const sub=req.body.subscription;
+    if(!sub?.endpoint||!sub?.keys?.p256dh||!sub?.keys?.auth)return apiError(res,400,'Invalid notification subscription.');
+    await pool.query('INSERT INTO push_subscriptions(id,user_id,subscription) VALUES($1,$2,$3::jsonb) ON CONFLICT(user_id,subscription) DO NOTHING',[makeId(),req.session.userId,JSON.stringify(sub)]);res.json({ok:true});
+  }catch(e){next(e)}
+});
+app.delete('/api/push/subscribe', requireAuth, async (req,res,next)=>{try{await pool.query('DELETE FROM push_subscriptions WHERE user_id=$1 AND subscription->>\'endpoint\'=$2',[req.session.userId,String(req.body.endpoint||'')]);res.json({ok:true})}catch(e){next(e)}});
+async function sendPush(userId,payload){ if(!pushReady)return; const rows=await pool.query('SELECT id,subscription FROM push_subscriptions WHERE user_id=$1',[userId]); for(const row of rows.rows){try{await webpush.sendNotification(row.subscription,JSON.stringify(payload),{TTL:90});}catch(e){if(e.statusCode===404||e.statusCode===410)await pool.query('DELETE FROM push_subscriptions WHERE id=$1',[row.id]);}} }
 
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ ok: true, app: 'VIBE', database: 'connected', time: now() }); }
@@ -168,7 +202,7 @@ app.post('/api/register', async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 12);
     let result;
     try {
-      result = await pool.query('INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3) RETURNING id, username, created_at', [id, username, passwordHash]);
+      result = await pool.query('INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3) RETURNING id, username, avatar_url, created_at', [id, username, passwordHash]);
     } catch (error) {
       if (error.code === '23505') return apiError(res, 409, 'That username is already taken.');
       throw error;
@@ -181,7 +215,7 @@ app.post('/api/login', async (req, res, next) => {
   try {
     const username = cleanUsername(req.body.username);
     const password = String(req.body.password || '');
-    const result = await pool.query('SELECT id, username, password_hash, created_at FROM users WHERE username = $1', [username]);
+    const result = await pool.query('SELECT id, username, avatar_url, password_hash, created_at FROM users WHERE username = $1', [username]);
     const user = result.rows[0];
     const valid = user ? await bcrypt.compare(password, user.password_hash) : false;
     if (!valid) return apiError(res, 401, 'Incorrect username or password.');
@@ -331,7 +365,7 @@ app.post('/api/users/:id/follow', requireAuth, async (req,res,next)=>{
   catch(error){next(error)}
 });
 app.get('/api/profile/:username', requireAuth, async (req,res,next)=>{
-  try { const u=await pool.query('SELECT id,username,created_at FROM users WHERE username=$1',[cleanUsername(req.params.username)]); if(!u.rowCount)return apiError(res,404,'Profile not found.'); const user=u.rows[0], viewer=req.session.userId;
+  try { const u=await pool.query('SELECT id,username,avatar_url,created_at FROM users WHERE username=$1',[cleanUsername(req.params.username)]); if(!u.rowCount)return apiError(res,404,'Profile not found.'); const user=u.rows[0], viewer=req.session.userId;
     const [counts, followState, posts, favorites, reposts, likedVideos, followers, followingList]=await Promise.all([
       pool.query(`SELECT (SELECT COUNT(*)::int FROM follows WHERE followed_id=$1) followers,(SELECT COUNT(*)::int FROM follows WHERE follower_id=$1) following,(SELECT COUNT(*)::int FROM shorts WHERE user_id=$1) posts,(SELECT COUNT(*)::int FROM short_favorites f JOIN shorts s ON s.id=f.short_id WHERE f.user_id=$1) favorites,(SELECT COUNT(*)::int FROM short_reposts WHERE user_id=$1) reposts,(SELECT COUNT(*)::int FROM short_likes l JOIN shorts s ON s.id=l.short_id WHERE s.user_id=$1) likes`,[user.id]),
       pool.query('SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id=$1 AND followed_id=$2) following',[viewer,user.id]),
@@ -342,7 +376,7 @@ app.get('/api/profile/:username', requireAuth, async (req,res,next)=>{
       pool.query(`SELECT u.id,u.username,EXISTS(SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followed_id=u.id) following FROM follows f JOIN users u ON u.id=f.follower_id WHERE f.followed_id=$1 ORDER BY f.created_at DESC LIMIT 200`,[user.id,viewer]),
       pool.query(`SELECT u.id,u.username,EXISTS(SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followed_id=u.id) following FROM follows f JOIN users u ON u.id=f.followed_id WHERE f.follower_id=$1 ORDER BY f.created_at DESC LIMIT 200`,[user.id,viewer])
     ]);
-    res.json({profile:{id:user.id,username:user.username,createdAt:user.created_at,isMe:user.id===viewer,isFollowing:followState.rows[0].following,...counts.rows[0]},posts:posts.rows,favorites:user.id===viewer?likedVideos.rows:[],liked:user.id===viewer?favorites.rows:[],reposts:reposts.rows,followers:followers.rows,followingList:followingList.rows});
+    res.json({profile:{id:user.id,username:user.username,createdAt:user.created_at,isMe:user.id===viewer,avatarUrl:user.avatar_url,isFollowing:followState.rows[0].following,...counts.rows[0]},posts:posts.rows,favorites:user.id===viewer?likedVideos.rows:[],liked:user.id===viewer?favorites.rows:[],reposts:reposts.rows,followers:followers.rows,followingList:followingList.rows});
   }catch(error){next(error)}
 });
 app.get('/api/live', requireAuth, async (_req,res,next)=>{try{const r=await pool.query(`SELECT l.id,l.title,l.started_at,u.id user_id,u.username FROM live_streams l JOIN users u ON u.id=l.user_id WHERE l.status='live' ORDER BY l.started_at DESC LIMIT 50`);res.json({streams:r.rows,enabled:liveKitReady})}catch(e){next(e)}});
@@ -389,6 +423,8 @@ io.on('connection', async socket => {
       const user = await findUser(userId);
       const message = { id, conversationId, senderId: userId, sender: user.username, text, createdAt: inserted.rows[0].created_at };
       io.to('conversation:' + conversationId).emit('message:new', message);
+      const recipients=await pool.query('SELECT user_id FROM conversation_members WHERE conversation_id=$1 AND user_id<>$2',[conversationId,userId]);
+      for(const recipient of recipients.rows){ if(!onlineUsers.has(recipient.user_id)) sendPush(recipient.user_id,{title:'New VIBE message',body:`@${user.username}: ${text.slice(0,110)}`,url:'/'}).catch(()=>{}); }
       const conversation = await findConversation(conversationId);
       io.to('conversation:' + conversationId).emit('conversation:updated', await conversationSummary(conversation, userId));
     } catch { socket.emit('app:error', 'Message could not be saved. Please try again.'); }
@@ -398,7 +434,9 @@ io.on('connection', async socket => {
     const targetId = String(payload?.targetUserId || '');
     if (!c || c.type !== 'direct' || !(await isMember(c.id, userId)) || !(await isMember(c.id, targetId)) || targetId === userId) return;
     const user = await findUser(userId);
-    io.to('user:' + targetId).emit('call:invite', { conversationId: c.id, fromUserId: userId, fromUsername: user.username, mode: payload?.mode === 'audio' ? 'audio' : 'video' });
+    const invite={ conversationId: c.id, fromUserId: userId, fromUsername: user.username, mode: payload?.mode === 'audio' ? 'audio' : 'video' };
+    io.to('user:' + targetId).emit('call:invite', invite);
+    if(!onlineUsers.has(targetId)) sendPush(targetId,{title:`Incoming ${invite.mode} call`,body:`@${user.username} is calling you`,url:`/?call=${encodeURIComponent(c.id)}&from=${encodeURIComponent(user.username)}&fromId=${encodeURIComponent(userId)}&mode=${encodeURIComponent(invite.mode)}`,tag:'vibe-call',requireInteraction:true}).catch(()=>{});
   });
   for (const event of ['call:accept', 'call:decline', 'call:offer', 'call:answer', 'call:ice', 'call:end']) {
     socket.on(event, async payload => {

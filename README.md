@@ -94,3 +94,9 @@ The database tables are created automatically at startup. Existing VIBE accounts
 
 ## Cloudinary video storage for Shorts
 Set `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` in your hosting environment. Create an unsigned upload preset named `vibe_shorts` in Cloudinary, restrict allowed formats to mp4/webm/mov, set a maximum file size of 25 MB, and set the asset folder to `vibe/shorts`. Do not expose an API secret in browser code. The application uploads videos directly to Cloudinary and stores their URLs in PostgreSQL.
+
+## Profile photos and background notifications
+
+- Profile photos use the configured Cloudinary upload preset. The preset must allow unsigned **image** uploads as well as the existing video uploads. VIBE validates the returned image URL and stores it on the user's profile.
+- Browser push notifications require HTTPS and a service worker. Generate VAPID keys with `npx web-push generate-vapid-keys`, then add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` to the Render service environment. Keep the private key secret; never commit it to GitHub. Redeploy, sign in, open your profile, and select **Enable notifications** on each device/browser.
+- Incoming-call notifications open VIBE to the incoming-call screen. Web browsers cannot guarantee that a live WebRTC call remains active while the app is backgrounded or the phone switches apps; support depends on the operating system and browser. Video-call picture-in-picture can be requested by double-clicking the remote video where supported.
