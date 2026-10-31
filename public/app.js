@@ -276,7 +276,7 @@ function setupShortsAutoplay(host){
         const playPromise = video.play(); if (playPromise?.catch) playPromise.catch(()=>{});
       } else { video.pause(); }
     });
-  }, { root: host.id === 'shortFeed' ? host : null, threshold: [0, 0.25, 0.65, 0.9] });
+  }, { root: null, threshold: [0, 0.25, 0.65, 0.9] });
   videos.forEach(video => shortsPlaybackObserver.observe(video));
 }
 async function loadShorts(){
