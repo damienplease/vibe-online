@@ -260,6 +260,25 @@ function playLocal(i) { const t=playlist[i]; if(!t)return;currentAudioIndex=i;$(
 $('audio').addEventListener('ended',()=>{if(currentAudioIndex>=0&&currentAudioIndex+1<playlist.length)playLocal(currentAudioIndex+1)});
 
 // ---- Creator profiles and Shorts ----
+let shortsPlaybackObserver = null;
+function setupShortsAutoplay(host){
+  if (shortsPlaybackObserver) { shortsPlaybackObserver.disconnect(); shortsPlaybackObserver = null; }
+  const videos = [...host.querySelectorAll('.short-post video')];
+  videos.forEach(video => { video.muted = true; video.defaultMuted = true; video.loop = true; video.playsInline = true; video.setAttribute('muted',''); video.setAttribute('playsinline',''); video.preload = 'auto'; });
+  if (!('IntersectionObserver' in window)) {
+    videos.forEach(video => { if (video.getBoundingClientRect().top >= 0 && video.getBoundingClientRect().top < innerHeight) video.play().catch(()=>{}); });
+    return;
+  }
+  shortsPlaybackObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => { const video = entry.target;
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
+        videos.forEach(other => { if (other !== video) other.pause(); });
+        const playPromise = video.play(); if (playPromise?.catch) playPromise.catch(()=>{});
+      } else { video.pause(); }
+    });
+  }, { root: host.id === 'shortFeed' ? host : null, threshold: [0, 0.25, 0.65, 0.9] });
+  videos.forEach(video => shortsPlaybackObserver.observe(video));
+}
 async function loadShorts(){
   const data=await api('/api/shorts'); renderShorts(data.shorts,$('shortFeed'));
 }
@@ -268,9 +287,10 @@ function renderShorts(items,host){
   if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
   items.forEach(item=>{
     const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
-    card.innerHTML=`<video src="${esc(item.video_url)}" controls playsinline preload="metadata"></video><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
+    card.innerHTML=`<video src="${esc(item.video_url)}" muted playsinline loop autoplay preload="auto"></video><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
     host.appendChild(card);
   });
+  if(host.id === 'shortFeed') setupShortsAutoplay(host);
 }
 async function handleShortAction(e){
   const profile=e.target.closest('[data-profile]'); if(profile){openUserProfile(profile.dataset.profile);return;}
