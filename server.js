@@ -342,7 +342,7 @@ app.get('/api/profile/:username', requireAuth, async (req,res,next)=>{
       pool.query(`SELECT u.id,u.username,EXISTS(SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followed_id=u.id) following FROM follows f JOIN users u ON u.id=f.follower_id WHERE f.followed_id=$1 ORDER BY f.created_at DESC LIMIT 200`,[user.id,viewer]),
       pool.query(`SELECT u.id,u.username,EXISTS(SELECT 1 FROM follows f2 WHERE f2.follower_id=$2 AND f2.followed_id=u.id) following FROM follows f JOIN users u ON u.id=f.followed_id WHERE f.follower_id=$1 ORDER BY f.created_at DESC LIMIT 200`,[user.id,viewer])
     ]);
-    res.json({profile:{id:user.id,username:user.username,createdAt:user.created_at,isMe:user.id===viewer,isFollowing:followState.rows[0].following,...counts.rows[0]},posts:posts.rows,favorites:user.id===viewer?favorites.rows:[],liked:user.id===viewer?likedVideos.rows:[],reposts:reposts.rows,followers:followers.rows,followingList:followingList.rows});
+    res.json({profile:{id:user.id,username:user.username,createdAt:user.created_at,isMe:user.id===viewer,isFollowing:followState.rows[0].following,...counts.rows[0]},posts:posts.rows,favorites:user.id===viewer?likedVideos.rows:[],liked:user.id===viewer?favorites.rows:[],reposts:reposts.rows,followers:followers.rows,followingList:followingList.rows});
   }catch(error){next(error)}
 });
 app.get('/api/live', requireAuth, async (_req,res,next)=>{try{const r=await pool.query(`SELECT l.id,l.title,l.started_at,u.id user_id,u.username FROM live_streams l JOIN users u ON u.id=l.user_id WHERE l.status='live' ORDER BY l.started_at DESC LIMIT 50`);res.json({streams:r.rows,enabled:liveKitReady})}catch(e){next(e)}});
