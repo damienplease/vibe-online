@@ -93,6 +93,7 @@ function renderConversations() {
   });
 }
 function navigate(view) {
+  $('app').classList.toggle('shorts-open', view === 'shorts');
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $('viewTitle').textContent = ({home:'Good vibes only.',messages:'Your conversations.',music:'Turn it up.',streaming:'VIBE Live.',shorts:'Little moments. Big vibes.',profile:'Your profile.'})[view] || 'VIBE';
@@ -261,33 +262,44 @@ $('audio').addEventListener('ended',()=>{if(currentAudioIndex>=0&&currentAudioIn
 
 // ---- Creator profiles and Shorts ----
 let shortsPlaybackObserver = null;
+let loadedShorts = [];
 function setupShortsAutoplay(host){
   if (shortsPlaybackObserver) { shortsPlaybackObserver.disconnect(); shortsPlaybackObserver = null; }
   const videos = [...host.querySelectorAll('.short-post video')];
-  videos.forEach(video => { video.muted = true; video.defaultMuted = true; video.loop = true; video.playsInline = true; video.setAttribute('muted',''); video.setAttribute('playsinline',''); video.preload = 'auto'; });
+  videos.forEach(video => { video.muted = false; video.defaultMuted = false; video.loop = true; video.playsInline = true; video.removeAttribute('muted'); video.setAttribute('playsinline',''); video.preload = 'auto'; });
+  const playActive = async video => {
+    videos.forEach(other => { if (other !== video) other.pause(); });
+    try { await video.play(); }
+    catch (_) {
+      // Browsers commonly block autoplay with sound until the viewer interacts.
+      video.muted = true;
+      const card = video.closest('.short-post');
+      const sound = card?.querySelector('[data-video-control="sound"]');
+      if (sound) { sound.textContent = '🔇'; sound.setAttribute('aria-label','Turn sound on'); }
+      try { await video.play(); } catch (_) { /* wait for the viewer to press play */ }
+    }
+  };
   if (!('IntersectionObserver' in window)) {
-    videos.forEach(video => { if (video.getBoundingClientRect().top >= 0 && video.getBoundingClientRect().top < innerHeight) video.play().catch(()=>{}); });
+    const first = videos[0]; if (first) playActive(first);
     return;
   }
   shortsPlaybackObserver = new IntersectionObserver(entries => {
     entries.forEach(entry => { const video = entry.target;
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
-        videos.forEach(other => { if (other !== video) other.pause(); });
-        const playPromise = video.play(); if (playPromise?.catch) playPromise.catch(()=>{});
-      } else { video.pause(); }
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.72) playActive(video);
+      else video.pause();
     });
-  }, { root: null, threshold: [0, 0.25, 0.65, 0.9] });
+  }, { root: host, threshold: [0, 0.25, 0.5, 0.72, 0.9] });
   videos.forEach(video => shortsPlaybackObserver.observe(video));
 }
 async function loadShorts(){
-  const data=await api('/api/shorts'); renderShorts(data.shorts,$('shortFeed'));
+  const data=await api('/api/shorts'); loadedShorts=data.shorts||[]; renderShorts(loadedShorts,$('shortFeed'));
 }
 function renderShorts(items,host){
   host.innerHTML='';
   if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
   items.forEach(item=>{
     const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
-    card.innerHTML=`<video src="${esc(item.video_url)}" muted playsinline loop autoplay preload="auto"></video><div class="short-playback-controls"><button type="button" data-video-control="play" aria-label="Pause video">Ⅱ</button><button type="button" data-video-control="sound" aria-label="Turn sound on">🔇</button></div><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
+    card.innerHTML=`<video src="${esc(item.video_url)}" playsinline loop autoplay preload="auto"></video><div class="short-playback-controls"><button type="button" data-video-control="play" aria-label="Pause video">Ⅱ</button><button type="button" data-video-control="sound" aria-label="Mute video">🔊</button></div><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
     host.appendChild(card);
   });
   if(host.id === 'shortFeed') setupShortsAutoplay(host);
@@ -302,6 +314,14 @@ async function handleShortAction(e){
     const result=await api(`/api/shorts/${id}/${action}`,{method:'POST'});btn.classList.toggle('selected',result.active);if(action==='like')btn.innerHTML=`♥ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else if(action==='repost')btn.textContent=`↻ ${Math.max(0,Number(btn.textContent.replace(/\D/g,''))+(result.active?1:-1))}`;else btn.textContent=result.active?'★ Saved':'★ Save';
   }catch(err){toast(err.message)}
 }
+function filterMoments(query){
+  const q=query.trim().toLowerCase();
+  const matches=!q?loadedShorts:loadedShorts.filter(item=>String(item.caption||'').toLowerCase().includes(q)||String(item.username||'').toLowerCase().includes(q));
+  renderShorts(matches,$('shortFeed'));
+  const results=$('momentsSearchResults');
+  if(results) results.textContent=q?`${matches.length} matching moment${matches.length===1?'':'s'} · searching captions and creator usernames`:'';
+}
+$('momentsSearch')?.addEventListener('input',e=>filterMoments(e.target.value));
 $('shortFeed').addEventListener('click',handleShortAction);
 $('profilePanel').addEventListener('click',handleShortAction);
 async function uploadShort(file,caption){
