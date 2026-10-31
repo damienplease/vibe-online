@@ -14,6 +14,14 @@ async function api(url, options = {}) {
   return data;
 }
 function toast(text) { const el = $('toast'); el.textContent = text; el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 3200); }
+function paintAvatar(el,url,username){if(!el)return;el.textContent=url?'':String(username||'V').slice(0,2).toUpperCase();el.style.backgroundImage=url?`url("${url.replace(/"/g,'%22')}")`:'';el.classList.toggle('has-photo',!!url);}
+let vibeServiceWorker=null;
+async function registerServiceWorker(){if(!('serviceWorker'in navigator))return;try{vibeServiceWorker=await navigator.serviceWorker.register('/sw.js');}catch(e){console.warn('VIBE notifications unavailable',e);}}
+async function enableVibeNotifications(){if(!('Notification'in window)||!('serviceWorker'in navigator)||!('PushManager'in window)){toast('This browser does not support web push notifications.');return;}
+ const permission=await Notification.requestPermission();if(permission!=='granted'){toast('Allow notifications in your browser settings to receive VIBE alerts.');return;}
+ const cfg=await api('/api/push/public-key');if(!cfg.enabled||!cfg.publicKey){toast('VIBE push notifications need server VAPID keys configured first.');return;}
+ const reg=vibeServiceWorker||await navigator.serviceWorker.ready;const bytes=Uint8Array.from(atob(cfg.publicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+ const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});await api('/api/push/subscribe',{method:'POST',body:JSON.stringify({subscription:sub.toJSON()})});toast('VIBE notifications enabled on this device.');}
 function showNotice(text) { $('notice').textContent = text; $('notice').classList.remove('hidden'); }
 function hideNotice() { $('notice').classList.add('hidden'); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -36,7 +44,7 @@ $('authForm').addEventListener('submit', async e => {
 });
 async function enterApp() {
   $('auth').classList.add('hidden'); $('app').classList.remove('hidden');
-  $('myName').textContent = me.username; $('myAvatar').textContent = me.username.slice(0,2).toUpperCase();
+  $('myName').textContent = me.username; paintAvatar($('myAvatar'),me.avatarUrl,me.username); registerServiceWorker();
   connectSocket(); await loadConversations(); navigate('home');
 }
 async function checkSession() {
@@ -46,7 +54,7 @@ async function checkSession() {
 function connectSocket() {
   if (socket) socket.disconnect();
   socket = io({ withCredentials: true });
-  socket.on('connect', () => { hideNotice(); conversations.forEach(c => socket.emit('conversation:join', c.id)); });
+  socket.on('connect', () => { hideNotice(); conversations.forEach(c => socket.emit('conversation:join', c.id)); const q=new URLSearchParams(location.search);if(q.has('call')&&q.has('fromId')){receiveInvite({conversationId:q.get('call'),fromUserId:q.get('fromId'),fromUsername:q.get('from')||'VIBE user',mode:q.get('mode')==='audio'?'audio':'video'});history.replaceState({},'',location.pathname);}});
   socket.on('connect_error', err => showNotice('Live chat connection failed: ' + (err.message || 'please refresh and sign in again.')));
   socket.on('presence:update', users => { presence = new Set(users.map(u => u.userId)); renderConversations(); });
   socket.on('message:new', msg => {
@@ -233,6 +241,7 @@ $('audioCall').addEventListener('click',()=>startCall('audio')); $('videoCall').
 $('acceptCall').addEventListener('click',acceptInvite);
 $('declineCall').addEventListener('click',()=>{if(pendingInvite&&socket)socket.emit('call:decline',{conversationId:pendingInvite.conversationId,targetUserId:pendingInvite.fromUserId});pendingInvite=null;$('callLayer').classList.add('hidden');$('incomingActions').classList.add('hidden')});
 $('endCall').addEventListener('click',()=>finishCall(true));
+$('remoteVideo').addEventListener('dblclick',async()=>{try{if(document.pictureInPictureEnabled&&$('remoteVideo').readyState>=2)await $('remoteVideo').requestPictureInPicture();}catch{toast('Picture-in-picture is not available in this browser.');}});
 $('muteCall').addEventListener('click',()=>{muted=!muted;localStream?.getAudioTracks().forEach(t=>t.enabled=!muted);$('muteCall').textContent=muted?'Unmute mic':'Mute mic'});
 $('cameraCall').addEventListener('click',()=>{cameraOff=!cameraOff;localStream?.getVideoTracks().forEach(t=>t.enabled=!cameraOff);$('cameraCall').textContent=cameraOff?'Camera on':'Camera off'});
 async function finishCall(notify) {
@@ -392,15 +401,20 @@ async function loadProfile(username){
   return data;
 }
 function renderPeople(people,host){host.innerHTML='';if(!people?.length){host.innerHTML='<div class="empty-state compact">No users to show yet.</div>';return;}people.forEach(u=>{const row=document.createElement('div');row.className='track-row';row.innerHTML=`<div class="avatar">${esc(u.username.slice(0,2).toUpperCase())}</div><div class="track-title"><strong>@${esc(u.username)}</strong></div><button class="smallbtn" data-profile="${esc(u.username)}">View profile</button>${u.id===me.id?'':`<button class="smallbtn" data-follow-user="${esc(u.id)}">${u.following?'Following':'Follow'}</button>`}`;host.appendChild(row)});}
+async function uploadAvatar(file){if(!file)return;if(!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)||file.size>5*1024*1024){toast('Choose a JPG, PNG, WebP or GIF image under 5 MB.');return;}
+ const cfg=await api('/api/avatar/upload-config',{method:'POST',body:JSON.stringify({contentType:file.type,size:file.size})});const form=new FormData();form.append('file',file);form.append('upload_preset',cfg.uploadPreset);form.append('folder','vibe/avatars');
+ const response=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cfg.cloudName)}/image/upload`,{method:'POST',body:form});const asset=await response.json();if(!response.ok||!asset.secure_url)throw new Error(asset.error?.message||'Profile picture upload failed.');
+ const saved=await api('/api/avatar',{method:'POST',body:JSON.stringify({url:asset.secure_url})});me=saved.user;paintAvatar($('myAvatar'),me.avatarUrl,me.username);paintAvatar($('homeAvatar'),me.avatarUrl,me.username);if(profileData?.profile?.isMe){profileData.profile.avatarUrl=me.avatarUrl;renderProfile();}toast('Profile picture updated.');}
 function renderProfile(){
   if(!profileData)return;const p=profileData.profile;const host=$('profilePanel');
   const ownTabs=p.isMe?['posts','reposts','liked','favorites']:['posts','reposts'];
   const tabLabels={posts:'Posts',reposts:'Reposts',liked:'Liked videos',favorites:'Favorites'};
   if(!ownTabs.includes(profileTab))profileTab='posts';
-  host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar">${esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${Number(p.followers)||0}</strong><span>Followers</span></div><div><strong>${Number(p.following)||0}</strong><span>Following</span></div>${p.isMe?`<div><strong>${Number(p.likes)||0}</strong><span>Likes</span></div>`:''}</div><div class="profile-tabs">${ownTabs.map(tab=>`<button data-profile-tab="${tab}" class="${profileTab===tab?'active':''}">${tabLabels[tab]}</button>`).join('')}</div><div id="profileShorts" class="short-grid"></div>`;
+  host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar" id="profileAvatar">${p.avatarUrl?`<img src="${esc(p.avatarUrl)}" alt="Profile picture">`:esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'<div class="profile-tools"><label class="smallbtn">Change photo<input id="avatarUpload" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label><button class="smallbtn" id="enableNotifications">Enable notifications</button></div>':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${Number(p.followers)||0}</strong><span>Followers</span></div><div><strong>${Number(p.following)||0}</strong><span>Following</span></div>${p.isMe?`<div><strong>${Number(p.likes)||0}</strong><span>Likes</span></div>`:''}</div><div class="profile-tabs">${ownTabs.map(tab=>`<button data-profile-tab="${tab}" class="${profileTab===tab?'active':''}">${tabLabels[tab]}</button>`).join('')}</div><div id="profileShorts" class="short-grid"></div>`;
   renderShorts((profileData[profileTab]||[]).map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing})),$('profileShorts'));
   $('profileShorts').querySelectorAll('video').forEach(v=>{v.pause();v.autoplay=false;v.removeAttribute('autoplay');v.preload='metadata';v.muted=true;v.setAttribute('controls','');v.setAttribute('aria-label','Select to play this post');});
   host.querySelectorAll('[data-profile-tab]').forEach(b=>b.addEventListener('click',()=>{profileTab=b.dataset.profileTab;renderProfile()}));
+  if(p.isMe){$('avatarUpload').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';uploadAvatar(f).catch(err=>toast(err.message));});$('enableNotifications').addEventListener('click',()=>enableVibeNotifications().catch(err=>toast(err.message)));}
   if(!p.isMe)$('toggleFollow').onclick=async()=>{try{const r=await api(`/api/users/${p.id}/follow`,{method:'POST'});p.isFollowing=r.following;p.followers=Math.max(0,Number(p.followers)+(r.following?1:-1));renderProfile()}catch(e){toast(e.message)}};
 }
 

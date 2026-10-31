@@ -421,3 +421,6 @@ input[type=range]{height:9px!important;border:1px solid rgba(255,255,255,.22)!im
   .nav b{width:38px!important;height:38px!important;border-radius:13px!important;font-size:24px!important;}
 }
 @media(max-width:390px){#view-shorts .shorts-heading{min-height:49px!important;padding:7px 12px!important}#view-shorts #shortFeed .short-post{height:calc(100svh - 49px - 72px - env(safe-area-inset-bottom))!important}.nav b{width:35px!important;height:35px!important}}
+/* Custom profile photos */
+.avatar.has-photo,.nudge-avatar.has-photo{background-size:cover;background-position:center;background-repeat:no-repeat;color:transparent!important;}
+.profile-avatar{overflow:hidden;flex:0 0 auto}.profile-avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit}.profile-tools{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}.profile-tools label{cursor:pointer}
