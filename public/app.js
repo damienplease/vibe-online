@@ -305,6 +305,13 @@ function renderShorts(items,host){
   if(host.id === 'shortFeed') setupShortsAutoplay(host);
 }
 async function handleShortAction(e){
+  const tappedVideo=e.target.closest('.short-post video');
+  if(tappedVideo && e.detail===2){
+    const card=tappedVideo.closest('.short-post');
+    const likeButton=card?.querySelector('[data-action="like"]');
+    if(likeButton){likeButton.click();const burst=document.createElement('div');burst.className='moment-like-burst';burst.textContent='♥';card.appendChild(burst);setTimeout(()=>burst.remove(),850);}
+    return;
+  }
   const videoControl=e.target.closest('[data-video-control]'); if(videoControl){const card=videoControl.closest('.short-post');const video=card?.querySelector('video');if(!video)return;if(videoControl.dataset.videoControl==='play'){if(video.paused){video.play().catch(()=>{});videoControl.textContent='Ⅱ';videoControl.setAttribute('aria-label','Pause video');}else{video.pause();videoControl.textContent='▶';videoControl.setAttribute('aria-label','Play video');}}else{video.muted=!video.muted;video.defaultMuted=video.muted;videoControl.textContent=video.muted?'🔇':'🔊';videoControl.setAttribute('aria-label',video.muted?'Turn sound on':'Mute video');if(!video.muted)video.play().catch(()=>{});}return;}
   const profile=e.target.closest('[data-profile]'); if(profile){openUserProfile(profile.dataset.profile);return;}
   const follow=e.target.closest('[data-follow-creator]'); if(follow){try{const r=await api(`/api/users/${follow.dataset.followCreator}/follow`,{method:'POST'});follow.textContent=r.following?'Following':'+ Follow';follow.classList.toggle('following',r.following);const card=follow.closest('[data-short-id]');if(card){const item=(await api('/api/shorts')).shorts.find(x=>x.id===card.dataset.shortId);if(item){follow.textContent=item.is_following?'Following':'+ Follow';}}}catch(err){toast(err.message)}return;}
