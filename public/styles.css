@@ -298,3 +298,21 @@ html{background:#050505;scroll-behavior:smooth}body{min-height:100dvh;background
  #app.shorts-open #shortFeed .short-post video{object-fit:cover}
 }
 @media(prefers-reduced-motion:reduce){#app.shorts-open #shortFeed{scroll-behavior:auto}}
+
+/* Profile posts are click-to-play only; Moments search exposes real matches. */
+#profileShorts .short-post{position:relative;min-width:0;aspect-ratio:9/16;max-height:520px;overflow:hidden;border-radius:20px;background:#050505;border:1px solid rgba(255,255,255,.12)}
+#profileShorts .short-post video{display:block;width:100%;height:100%;object-fit:cover;background:#050505;cursor:pointer}
+#profileShorts .short-playback-controls{position:absolute;top:10px;right:10px;display:flex;gap:7px;z-index:5}
+#profileShorts .short-playback-controls button{background:rgba(0,0,0,.68);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:999px;width:35px;height:35px;backdrop-filter:blur(15px)}
+#profileShorts .short-post video:not([controls]){pointer-events:auto}
+.moments-result-summary{padding:5px 2px 8px;color:#bcbcc3;font-size:11px}
+.moment-search-result{display:flex;align-items:center;gap:11px;width:100%;padding:10px;border:1px solid rgba(255,255,255,.1);border-radius:13px;background:rgba(255,255,255,.055);color:#f5f5f7;text-align:left;margin:5px 0;cursor:pointer}
+.moment-search-result:hover{background:rgba(255,255,255,.12)}
+.moment-result-icon{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:10px;background:rgba(255,255,255,.12)}
+.moment-search-result strong,.moment-search-result small{display:block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.moment-search-result strong{font-size:11px}.moment-search-result small{font-size:10px;color:#9999a2;margin-top:4px}
+.moments-no-results{padding:10px;color:#a0a0a8;font-size:11px;line-height:1.5}
+.recording-preview{display:block;width:100%;max-height:55vh;aspect-ratio:9/16;object-fit:contain;background:#050505;border-radius:18px;margin:14px 0}
+.record-caption-label{display:block;color:#c9c9ce;font-size:11px;margin:12px 0}
+.record-caption-label input{display:block;width:100%;margin-top:7px;padding:12px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff}
+@media(max-width:700px){#profileShorts.short-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#profileShorts .short-post{border-radius:14px;max-height:360px}}

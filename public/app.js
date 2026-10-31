@@ -299,7 +299,7 @@ function renderShorts(items,host){
   if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
   items.forEach(item=>{
     const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
-    card.innerHTML=`<video src="${esc(item.video_url)}" playsinline loop autoplay preload="auto"></video><div class="short-playback-controls"><button type="button" data-video-control="play" aria-label="Pause video">Ⅱ</button><button type="button" data-video-control="sound" aria-label="Mute video">🔊</button></div><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
+    card.innerHTML=`<video src="${esc(item.video_url)}" playsinline loop preload="metadata"></video><div class="short-playback-controls"><button type="button" data-video-control="play" aria-label="Pause video">Ⅱ</button><button type="button" data-video-control="sound" aria-label="Mute video">🔊</button></div><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button></div>`;
     host.appendChild(card);
   });
   if(host.id === 'shortFeed') setupShortsAutoplay(host);
@@ -319,11 +319,18 @@ function filterMoments(query){
   const matches=!q?loadedShorts:loadedShorts.filter(item=>String(item.caption||'').toLowerCase().includes(q)||String(item.username||'').toLowerCase().includes(q));
   renderShorts(matches,$('shortFeed'));
   const results=$('momentsSearchResults');
-  if(results) results.textContent=q?`${matches.length} matching moment${matches.length===1?'':'s'} · searching captions and creator usernames`:'';
+  if(results){
+    results.innerHTML='';
+    if(q){
+      const summary=document.createElement('div');summary.className='moments-result-summary';summary.textContent=`${matches.length} result${matches.length===1?'':'s'} for “${query.trim()}”`;results.appendChild(summary);
+      if(matches.length){matches.slice(0,6).forEach(item=>{const row=document.createElement('button');row.type='button';row.className='moment-search-result';row.innerHTML=`<span class="moment-result-icon">▶</span><span><strong>${esc(item.caption||'Untitled moment')}</strong><small>@${esc(item.username)}</small></span>`;row.addEventListener('click',()=>{const card=$('shortFeed').querySelector(`[data-short-id="${CSS.escape(String(item.id))}"]`);card?.scrollIntoView({behavior:'smooth',block:'start'});card?.querySelector('video')?.play().catch(()=>{});});results.appendChild(row);});}
+      else {const empty=document.createElement('div');empty.className='moments-no-results';empty.textContent='No videos or creators match that search.';results.appendChild(empty);}
+    }
+  }
 }
 $('momentsSearch')?.addEventListener('input',e=>filterMoments(e.target.value));
 $('shortFeed').addEventListener('click',handleShortAction);
-$('profilePanel').addEventListener('click',handleShortAction);
+$('profilePanel').addEventListener('click',e=>{const video=e.target.closest('#profileShorts video');if(video){const all=$('profileShorts').querySelectorAll('video');all.forEach(v=>{if(v!==video)v.pause()});if(video.paused)video.play().catch(()=>toast('Press the play control to start this video.'));else video.pause();return;}handleShortAction(e);});
 async function uploadShort(file,caption){
   if(!file||!file.type.startsWith('video/'))throw new Error('Choose a video file.');
   if(file.size>100*1024*1024)throw new Error('Videos must be smaller than 100 MB.');
@@ -336,18 +343,31 @@ async function uploadShort(file,caption){
 }
 $('shortUpload').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;const caption=prompt('Add a caption for your Short (optional):')||'';try{await uploadShort(file,caption)}catch(err){toast(err.message)}});
 $('recordShort').addEventListener('click',async()=>{
-  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast('Video recording is not supported in this browser.');
+  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){toast('Video recording is not supported in this browser.');return;}
   try{
-    shortRecordStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:true});
-    const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];const mimeType=types.find(t=>MediaRecorder.isTypeSupported(t));
+    shortRecordStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:1280}},audio:true});
+    const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+    const mimeType=types.find(t=>MediaRecorder.isTypeSupported(t));
     shortRecorder=new MediaRecorder(shortRecordStream,mimeType?{mimeType}:undefined);shortRecordChunks=[];
-    openModal('<h2>Record a Short</h2><p>Record up to 60 seconds. Make sure everyone shown has agreed to be recorded.</p><video id="recordPreview" class="recording-preview" autoplay muted playsinline></video><div class="short-actions"><button id="beginRecording" class="primary">Start recording</button><button id="stopRecording" class="danger" disabled>Stop & preview</button></div><p id="recordStatus" class="fine">Camera ready.</p>');$('recordPreview').srcObject=shortRecordStream;
-    $('beginRecording').onclick=()=>{shortRecorder.start();$('beginRecording').disabled=true;$('stopRecording').disabled=false;$('recordStatus').textContent='Recording… it will stop automatically after 60 seconds.';setTimeout(()=>{if(shortRecorder?.state==='recording')shortRecorder.stop()},60000)};
+    openModal('<h2>Record a Moment</h2><p>Record up to 60 seconds. Allow camera and microphone access when your browser asks.</p><video id="recordPreview" class="recording-preview" autoplay muted playsinline></video><div class="short-actions"><button id="beginRecording" class="primary">Start recording</button><button id="stopRecording" class="danger" disabled>Stop recording</button></div><p id="recordStatus" class="fine">Camera ready.</p>');
+    $('recordPreview').srcObject=shortRecordStream;
+    $('beginRecording').onclick=()=>{try{shortRecordChunks=[];shortRecorder.start(1000);$('beginRecording').disabled=true;$('stopRecording').disabled=false;$('recordStatus').textContent='Recording… maximum 60 seconds.';window.shortRecordLimit=setTimeout(()=>{if(shortRecorder?.state==='recording')shortRecorder.stop()},60000);}catch(err){toast('Could not start recording: '+err.message)}};
     $('stopRecording').onclick=()=>{if(shortRecorder?.state==='recording')shortRecorder.stop()};
-    shortRecorder.ondataavailable=e=>{if(e.data.size)shortRecordChunks.push(e.data)};
-    shortRecorder.onstop=async()=>{shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;const type=shortRecorder.mimeType||'video/webm';const blob=new Blob(shortRecordChunks,{type});const file=new File([blob],`vibe-short-${Date.now()}.${type.includes('mp4')?'mp4':'webm'}`,{type});closeModal();const caption=prompt('Add a caption for your Short (optional):')||'';try{await uploadShort(file,caption)}catch(err){toast(err.message)}};
-  }catch(err){shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;toast('Camera access was not available. Allow camera and microphone access on the secure website.');}
+    shortRecorder.ondataavailable=e=>{if(e.data&&e.data.size)shortRecordChunks.push(e.data)};
+    shortRecorder.onerror=()=>toast('The browser could not record this video. Please try again.');
+    shortRecorder.onstop=()=>{
+      clearTimeout(window.shortRecordLimit);
+      shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;
+      const type=shortRecorder.mimeType||'video/webm';const blob=new Blob(shortRecordChunks,{type});
+      if(!blob.size){$('recordStatus').textContent='No video was captured. Please record again.';return;}
+      const url=URL.createObjectURL(blob);
+      $('modalContent').innerHTML=`<h2>Preview your Moment</h2><video id="recordedPreview" class="recording-preview" controls playsinline src="${url}"></video><label class="record-caption-label">Caption<input id="recordCaption" maxlength="500" placeholder="Add a caption (optional)"></label><div class="short-actions"><button id="postRecordedMoment" class="primary">Post moment</button><button id="discardRecording" class="secondary">Discard</button></div><p id="recordStatus" class="fine">Review your recording before posting.</p>`;
+      $('discardRecording').onclick=()=>{URL.revokeObjectURL(url);closeModal()};
+      $('postRecordedMoment').onclick=async()=>{const button=$('postRecordedMoment');button.disabled=true;button.textContent='Uploading…';const ext=type.includes('mp4')?'mp4':'webm';const file=new File([blob],`vibe-moment-${Date.now()}.${ext}`,{type});try{await uploadShort(file,$('recordCaption').value.trim());URL.revokeObjectURL(url);closeModal();}catch(err){button.disabled=false;button.textContent='Post moment';$('recordStatus').textContent=err.message;}};
+    };
+  }catch(err){shortRecordStream?.getTracks().forEach(t=>t.stop());shortRecordStream=null;toast(err?.name==='NotAllowedError'?'Camera or microphone permission was denied. Allow access in your browser settings.':`Could not open the camera: ${err.message||'check browser permissions'}`);}
 });
+
 function openUserProfile(username){ profileNavigationTarget=String(username||'').trim(); navigate('profile'); }
 async function loadProfile(username){
   const requestId=++profileRequestSeq;
@@ -364,10 +384,11 @@ function renderPeople(people,host){host.innerHTML='';if(!people?.length){host.in
 function renderProfile(){
   if(!profileData)return;const p=profileData.profile;const host=$('profilePanel');
   const ownTabs=p.isMe?['posts','reposts','liked','favorites']:['posts','reposts'];
-  const tabLabels={posts:'Videos',reposts:'Reposts',liked:'Liked videos',favorites:'Favorites'};
+  const tabLabels={posts:'Posts',reposts:'Reposts',liked:'Liked videos',favorites:'Favorites'};
   if(!ownTabs.includes(profileTab))profileTab='posts';
   host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar">${esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${Number(p.followers)||0}</strong><span>Followers</span></div><div><strong>${Number(p.following)||0}</strong><span>Following</span></div>${p.isMe?`<div><strong>${Number(p.likes)||0}</strong><span>Likes</span></div>`:''}</div><div class="profile-tabs">${ownTabs.map(tab=>`<button data-profile-tab="${tab}" class="${profileTab===tab?'active':''}">${tabLabels[tab]}</button>`).join('')}</div><div id="profileShorts" class="short-grid"></div>`;
   renderShorts((profileData[profileTab]||[]).map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing})),$('profileShorts'));
+  $('profileShorts').querySelectorAll('video').forEach(v=>{v.pause();v.autoplay=false;v.removeAttribute('autoplay');v.preload='metadata';v.muted=true;v.setAttribute('controls','');v.setAttribute('aria-label','Select to play this post');});
   host.querySelectorAll('[data-profile-tab]').forEach(b=>b.addEventListener('click',()=>{profileTab=b.dataset.profileTab;renderProfile()}));
   if(!p.isMe)$('toggleFollow').onclick=async()=>{try{const r=await api(`/api/users/${p.id}/follow`,{method:'POST'});p.isFollowing=r.following;p.followers=Math.max(0,Number(p.followers)+(r.following?1:-1));renderProfile()}catch(e){toast(e.message)}};
 }
