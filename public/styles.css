@@ -161,3 +161,11 @@ body,
 .call-experience,.call-experience *{scrollbar-width:none;-ms-overflow-style:none}.call-experience::-webkit-scrollbar,.call-experience *::-webkit-scrollbar{display:none;width:0;height:0}
 @media(max-width:650px){.call-experience{height:calc(100dvh - 20px);max-height:calc(100dvh - 20px);border-radius:25px;gap:12px;padding:14px}.call-split-view{grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:10px}.call-video-tile{border-radius:20px}.fallback-avatar{width:54px;height:54px;border-radius:19px}.call-actions{gap:7px;padding:8px;border-radius:23px}.call-control{min-width:75px;min-height:60px;padding:7px}.call-header p{font-size:11px}}
 @media(max-height:560px) and (orientation:landscape){.call-experience{height:96dvh;max-height:96dvh;gap:8px;padding:10px}.call-split-view{grid-template-columns:1fr 1fr;grid-template-rows:1fr}.call-actions{padding:6px}.call-control{min-height:48px}}
+
+/* VIBE custom brand asset */
+.brand-logo{display:block;width:54px;height:54px;object-fit:contain;border-radius:17px;filter:drop-shadow(0 5px 12px rgba(85,35,190,.22))}
+.logo img{display:block;width:clamp(76px,9vw,112px);height:auto;max-height:112px;object-fit:contain;border-radius:22px;filter:drop-shadow(0 8px 20px rgba(83,34,190,.24))}
+.logo.small img{width:76px;max-height:76px}
+.logo:has(img){display:flex;align-items:center;gap:12px;letter-spacing:normal;text-shadow:none}
+.rail-brand{gap:7px}
+@media(max-width:760px){.brand-logo{width:42px;height:42px}}
