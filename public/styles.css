@@ -429,3 +429,135 @@ input[type=range]{height:9px!important;border:1px solid rgba(255,255,255,.22)!im
 .delete-moment-btn{border:1px solid rgba(255,105,125,.38)!important;background:rgba(120,24,42,.72)!important;color:#fff!important;border-radius:12px!important;min-width:48px;min-height:44px;padding:6px 8px!important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;box-shadow:0 5px 18px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.18)}
 .delete-moment-btn small{font-size:10px;font-weight:700;line-height:1.1}
 .delete-moment-btn:disabled{opacity:.55;cursor:wait}
+
+/* ==========================================================
+   VIBE PRISM — FULL LIQUID-GLASS INTERFACE SYSTEM
+   A complete visual skin across auth, navigation, home,
+   conversations, profiles, music, live and creator surfaces.
+   ========================================================== */
+:root{
+ --bg:#070811;--panel:rgba(255,255,255,.075);--panel2:rgba(255,255,255,.115);
+ --line:rgba(255,255,255,.19);--text:#f7f7ff;--muted:#aeb3c9;
+ --purple:#bba4ff;--pink:#ff9ed8;--green:#83f4d2;--red:#ff829d;
+ --glass-hi:rgba(255,255,255,.28);--glass-lo:rgba(255,255,255,.035);
+}
+html{background:#070811;scrollbar-color:rgba(210,199,255,.35) transparent}
+body{min-height:100vh;background:
+ radial-gradient(ellipse at 12% 8%,rgba(116,91,255,.24),transparent 34%),
+ radial-gradient(ellipse at 88% 18%,rgba(70,194,255,.16),transparent 32%),
+ radial-gradient(ellipse at 70% 90%,rgba(218,103,202,.16),transparent 35%),
+ linear-gradient(145deg,#090b18 0%,#111326 48%,#090a14 100%);background-attachment:fixed;color:var(--text)}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:.18;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.17'/%3E%3C/svg%3E")}
+/* Shared glass material */
+.sidebar,.topbar,.auth-card,.tile,.aside-card,.hero,.section-hero,.message-layout,.conversation-panel,.chat-panel,.audio-player,.track-row,.short-create-corner,.profile-card,.profile-cover,.profile-header,.profile-tabs,.profile-grid,.modal-card,.call-card,.live-stage,.notice,.conversation-list,.chat-heading,.composer,.track-art,.nav,.search-shell,.icon-action,.smallbtn,.primary,.secondary,.quiet,.link,.profile-tools button,.profile-tools label,.delete-moment-btn,.short-actions-rail button,.short-playback-controls button,.call-buttons button,.track-row button,.tabs,.tab,.auth-card input,.top-actions input,.composer input,.live-search,.profile-tabs button,.profile-grid>*{
+ -webkit-backdrop-filter:blur(28px) saturate(185%);backdrop-filter:blur(28px) saturate(185%);
+}
+.sidebar,.auth-card,.tile,.aside-card,.message-layout,.conversation-panel,.chat-panel,.audio-player,.track-row,.short-create-corner,.profile-card,.profile-cover,.profile-header,.profile-tabs,.profile-grid,.modal-card,.call-card,.live-stage,.notice,.section-hero,.search-shell,.icon-action,.smallbtn,.quiet,.tabs,.auth-card input,.top-actions input,.composer input,.live-search{
+ background:linear-gradient(145deg,rgba(255,255,255,.145),rgba(255,255,255,.035) 52%,rgba(180,166,255,.055))!important;
+ border:1px solid rgba(255,255,255,.2)!important;
+ box-shadow:inset 0 1.5px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(255,255,255,.055),0 18px 55px rgba(0,0,0,.22),0 2px 12px rgba(133,127,255,.055)!important;
+}
+/* Refraction edge: subtle bright upper rim and cool lower refraction */
+.tile,.aside-card,.auth-card,.message-layout,.section-hero,.audio-player,.short-create-corner,.profile-card,.live-stage{position:relative;isolation:isolate;overflow:hidden}
+.tile:before,.aside-card:before,.auth-card:before,.section-hero:before,.audio-player:before,.short-create-corner:before,.profile-card:before,.live-stage:before{
+ content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+ background:linear-gradient(122deg,rgba(255,255,255,.19),transparent 22%,transparent 68%,rgba(172,160,255,.10));
+}
+/* Navigation becomes a floating crystal rail */
+.sidebar{background:linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.035))!important;border:1px solid rgba(255,255,255,.22)!important;box-shadow:inset 0 1px #ffffff45,0 22px 65px #0007!important}
+.rail-brand{filter:drop-shadow(0 5px 14px #9d8aff55)}
+.brand-mark{background:linear-gradient(145deg,#fff 0%,#d9d5ff 35%,#8d78ff 72%,#4b3b9c)!important;color:#17152b!important;border:1px solid #ffffffaa!important;box-shadow:inset 0 2px 2px #fff, inset 0 -4px 8px #4b3b9c88,0 8px 22px #6d5aff55!important}
+.nav{position:relative;min-height:57px!important;border:1px solid transparent!important;border-radius:18px!important;color:#c7c9dc!important;background:transparent!important;transition:transform .22s ease,background .22s ease,box-shadow .22s ease!important}
+.nav b{display:grid!important;place-items:center!important;width:40px!important;height:40px!important;border-radius:14px!important;font-family:Arial,sans-serif!important;font-size:25px!important;font-weight:1000!important;line-height:1!important;color:#fff!important;-webkit-text-stroke:1.4px currentColor!important;background:radial-gradient(circle at 25% 12%,#fff9,transparent 42%),linear-gradient(145deg,rgba(255,255,255,.38),rgba(255,255,255,.07) 52%,rgba(121,108,255,.18))!important;border:1px solid #ffffff55!important;box-shadow:inset 0 2px 2px #fff9,inset 0 -3px 6px #0005,0 7px 16px #0005!important;text-shadow:0 2px 0 #555b78,0 4px 8px #0008!important}
+.nav.active,.nav:hover{background:linear-gradient(110deg,rgba(255,255,255,.19),rgba(165,146,255,.13))!important;border-color:#ffffff38!important;color:#fff!important;box-shadow:inset 0 1px #fff8,0 9px 24px #0004!important;transform:translateX(3px)}
+.nav.active b{background:radial-gradient(circle at 25% 10%,#fff,transparent 45%),linear-gradient(145deg,#f9f8ff,#c6c5ff 48%,#8878e9)!important;color:#29234e!important;-webkit-text-stroke:1.4px #29234e!important;box-shadow:inset 0 2px 2px #fff, inset 0 -4px 7px #6e60bd,0 0 0 2px #ffffff38,0 8px 20px #8874ff66!important}
+.nav:active,.primary:active,.smallbtn:active{transform:scale(.97)}
+.me{border-top-color:#ffffff24!important}.avatar,.nudge-avatar,.profile-avatar,.short-avatar{border:1px solid #ffffff70!important;box-shadow:inset 0 2px 3px #fff7,0 8px 22px #0005!important}
+/* Header and global controls */
+.main{position:relative}.topbar{padding:14px 17px;border-radius:23px;background:linear-gradient(120deg,rgba(255,255,255,.12),rgba(255,255,255,.035))!important;border:1px solid #ffffff24!important;box-shadow:inset 0 1px #fff5,0 14px 36px #0003!important}
+.topbar h2{letter-spacing:-.7px}.eyebrow{color:#d1c6ff!important;text-shadow:0 0 18px #a99aff55}
+.search-shell{border-radius:15px!important;padding:0 10px}.search-shell input,.top-actions input{background:transparent!important;border:0!important;box-shadow:none!important}
+.icon-action,.smallbtn,.quiet,.call-buttons button,.track-row button{border:1px solid #ffffff36!important;background:linear-gradient(145deg,#ffffff2c,#ffffff09)!important;color:#fff!important;box-shadow:inset 0 1px #fff8,0 7px 18px #0004!important;border-radius:14px!important}
+.primary{position:relative;overflow:hidden;border:1px solid #ffffff80!important;border-radius:15px!important;background:linear-gradient(120deg,rgba(255,255,255,.96),rgba(204,197,255,.88) 42%,rgba(153,135,255,.9))!important;color:#19172d!important;box-shadow:inset 0 2px 2px #fff, inset 0 -3px 7px #7467c8,0 9px 24px #8572ff45!important;text-shadow:0 1px #fff8}
+.primary:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,#fff8,transparent 38%,#fff2)}
+.secondary,.link{border:1px solid #ffffff38!important;border-radius:13px!important;background:linear-gradient(140deg,#ffffff24,#ffffff08)!important;color:#f4f0ff!important;box-shadow:inset 0 1px #fff6,0 6px 16px #0003!important}
+/* Home becomes layered glass dashboard */
+.hero{border:1px solid #ffffff45!important;border-radius:34px!important;background:radial-gradient(ellipse at 82% 14%,rgba(189,163,255,.48),transparent 37%),radial-gradient(ellipse at 14% 100%,rgba(89,196,255,.22),transparent 42%),linear-gradient(135deg,rgba(255,255,255,.2),rgba(255,255,255,.055) 52%,rgba(146,125,255,.13))!important;box-shadow:inset 0 2px 0 #ffffff66,inset 0 -1px #ffffff25,0 30px 80px #0005!important}
+.hero:after{content:"";position:absolute;inset:12px;border:1px solid #ffffff20;border-radius:26px;pointer-events:none}
+.hero h1{ text-shadow:0 7px 35px #0005}.hero-orb,.orb{filter:blur(1px) saturate(150%);opacity:.72}
+.tile{border-radius:25px!important;min-height:190px!important;transition:transform .25s ease,border-color .25s ease,background .25s ease!important}
+.tile:hover{transform:translateY(-5px);border-color:#ffffff55!important;background:linear-gradient(145deg,rgba(255,255,255,.2),rgba(255,255,255,.055))!important}
+.tile-icon,.track-art,.aside-note-icon{display:grid;place-items:center;border:1px solid #ffffff65!important;border-radius:16px!important;background:radial-gradient(circle at 25% 15%,#fff9,transparent 43%),linear-gradient(145deg,#ffffff4a,#ffffff0c 58%,#9d8cff33)!important;box-shadow:inset 0 2px 2px #fff9,inset 0 -3px 5px #0004,0 8px 22px #0004!important;text-shadow:0 3px 7px #0007}
+.aside-card{border-radius:26px!important}.profile-nudge .quiet{width:100%;text-align:left}
+/* Inbox: layered translucent panes and floating message bubbles */
+.message-layout{border-radius:28px!important;background:linear-gradient(140deg,rgba(255,255,255,.13),rgba(255,255,255,.035))!important;box-shadow:inset 0 1px #fff6,0 25px 65px #0005!important}
+.conversation-panel{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.025))!important;border-right:1px solid #ffffff22!important}
+.panel-head,.chat-heading,.composer{border-color:#ffffff20!important;background:rgba(255,255,255,.055)!important}
+.conv-item{border-bottom-color:#ffffff12!important;transition:background .2s ease}.conv-item.active,.conv-item:hover{background:linear-gradient(100deg,#ffffff24,#ffffff08)!important}
+.msg .bubble{background:linear-gradient(145deg,rgba(255,255,255,.19),rgba(255,255,255,.065))!important;border:1px solid #ffffff22;box-shadow:inset 0 1px #fff5,0 7px 20px #0003;backdrop-filter:blur(20px)}
+.msg.mine .bubble{background:linear-gradient(130deg,rgba(177,151,255,.78),rgba(117,142,255,.52))!important;border:1px solid #ffffff5c!important;box-shadow:inset 0 1px #fff9,0 8px 22px #7465d955!important;color:#fff}
+.composer input,.auth-card input,.live-search{border-radius:15px!important;background:rgba(5,7,18,.3)!important;border:1px solid #ffffff2c!important;box-shadow:inset 0 2px 9px #0003!important;color:#fff!important}
+/* Listen: crystal album tiles and player */
+.section-hero{border-radius:29px!important;background:radial-gradient(ellipse at 90% 5%,rgba(195,149,255,.32),transparent 40%),linear-gradient(140deg,rgba(255,255,255,.15),rgba(255,255,255,.035))!important}
+.track-row{margin:8px 0;border-radius:18px!important;border:1px solid #ffffff20!important;background:linear-gradient(130deg,#ffffff14,#ffffff04)!important}
+.track-art{width:52px;height:52px;border-radius:17px!important;color:#fff}
+.audio-player{border-radius:24px!important;background:linear-gradient(125deg,rgba(255,255,255,.18),rgba(255,255,255,.045))!important}
+.track-details audio{filter:drop-shadow(0 5px 12px #0005)}
+/* Profile, creator tools and live panels */
+.profile-cover{border-radius:27px 27px 18px 18px!important;border:1px solid #ffffff35!important;box-shadow:inset 0 2px #fff7,0 20px 55px #0005!important}
+.profile-header{border-radius:22px!important;padding:18px!important;background:linear-gradient(135deg,#ffffff1c,#ffffff06)!important;border:1px solid #ffffff26!important;box-shadow:inset 0 1px #fff7,0 15px 35px #0003!important}
+.profile-tabs{border-radius:18px!important;padding:7px!important;background:rgba(255,255,255,.09)!important}
+.profile-tabs button{border-radius:13px!important;border:1px solid transparent!important;background:transparent!important;color:#c9c9df!important}
+.profile-tabs button.active{background:linear-gradient(145deg,#ffffff4d,#ffffff13)!important;border-color:#ffffff5c!important;color:#fff!important;box-shadow:inset 0 1px #fff9,0 7px 17px #0004!important}
+.profile-grid{border-radius:23px!important;padding:10px!important;gap:12px!important}
+.profile-grid>*{border:1px solid #ffffff26!important;border-radius:17px!important;box-shadow:0 12px 30px #0004!important}
+.profile-tools label,.profile-tools button{border:1px solid #ffffff45!important;border-radius:14px!important;background:linear-gradient(145deg,#ffffff30,#ffffff0b)!important;color:#fff!important;box-shadow:inset 0 1px #fff8,0 7px 18px #0004!important}
+.delete-moment-btn{background:linear-gradient(145deg,rgba(255,126,150,.78),rgba(130,29,65,.72))!important;border:1px solid #ffc2d0a8!important;box-shadow:inset 0 1px #fff9,0 8px 18px #5c173955!important}
+.live-grid>*{border-radius:23px!important;border:1px solid #ffffff2c!important;background:linear-gradient(145deg,#ffffff1c,#ffffff05)!important;box-shadow:inset 0 1px #fff6,0 16px 36px #0004!important;overflow:hidden}
+.live-stage{border-radius:25px!important}
+/* Auth: glass portal */
+.auth-wrap{position:relative;isolation:isolate}.auth-wrap:before{content:"";position:absolute;inset:4%;z-index:-1;border-radius:50px;background:radial-gradient(ellipse at 20% 35%,#9d85ff30,transparent 42%),radial-gradient(ellipse at 80% 70%,#60caff20,transparent 40%);filter:blur(20px)}
+.auth-card{border-radius:32px!important;padding:clamp(24px,3vw,38px)!important;background:linear-gradient(145deg,rgba(255,255,255,.19),rgba(255,255,255,.055) 55%,rgba(167,151,255,.10))!important;border-color:#ffffff3c!important;box-shadow:inset 0 2px #fff8,inset 0 -1px #fff2,0 35px 100px #0008!important}
+.tabs{border-radius:15px!important;background:rgba(0,0,0,.2)!important;border:1px solid #ffffff24!important;padding:5px!important}
+.tab{border-radius:12px!important}.tab.active{background:linear-gradient(145deg,#ffffff42,#ffffff0d)!important;color:#fff!important;box-shadow:inset 0 1px #fff8,0 6px 16px #0004!important}
+/* Modals and notices */
+.modal,.call-layer{background:rgba(4,5,14,.66)!important;backdrop-filter:blur(22px) saturate(150%)!important;-webkit-backdrop-filter:blur(22px) saturate(150%)!important}
+.modal-card,.call-card{border-radius:27px!important;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.07))!important;border:1px solid #ffffff48!important;box-shadow:inset 0 1px #fff9,0 30px 90px #0009!important}
+.notice{border-radius:16px!important;background:linear-gradient(130deg,#ffffff20,#ffffff08)!important}
+/* Mobile: app becomes a glass-first, edge-to-edge canvas with floating dock */
+@media(max-width:700px){
+ body{background-attachment:scroll}
+ #app.app{display:block!important;min-height:100dvh!important;padding:0 0 calc(88px + env(safe-area-inset-bottom))!important}
+ #app .main{width:100%!important;max-width:none!important;margin:0!important;padding:12px 13px 28px!important}
+ #app:not(.shorts-open) .topbar{position:sticky;top:7px;z-index:20;margin:0 0 16px!important;padding:11px 13px!important;border-radius:21px!important;background:rgba(20,22,42,.62)!important;backdrop-filter:blur(32px) saturate(200%)!important;-webkit-backdrop-filter:blur(32px) saturate(200%)!important}
+ .topbar h2{font-size:19px!important}.topbar .eyebrow{font-size:8px!important;letter-spacing:1.3px!important}
+ .sidebar{position:fixed!important;z-index:80!important;left:10px!important;right:10px!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;top:auto!important;width:auto!important;height:73px!important;min-height:73px!important;padding:6px 8px!important;border-radius:25px!important;display:flex!important;flex-direction:row!important;align-items:center!important;background:linear-gradient(135deg,rgba(255,255,255,.24),rgba(255,255,255,.075) 50%,rgba(150,137,255,.17))!important;border:1px solid #ffffff5c!important;box-shadow:inset 0 1.5px #fff9,inset 0 -2px #0003,0 14px 42px #0009!important;backdrop-filter:blur(36px) saturate(220%)!important;-webkit-backdrop-filter:blur(36px) saturate(220%)!important}
+ .rail-brand,.side-bottom{display:none!important}.sidebar nav{display:flex!important;flex:1!important;justify-content:space-around!important;align-items:center!important;gap:3px!important;width:100%!important}
+ .nav{flex:1!important;min-width:0!important;height:59px!important;min-height:59px!important;padding:3px 1px!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;gap:2px!important;border-radius:17px!important;font-size:8px!important;background:transparent!important}
+ .nav b{width:35px!important;height:35px!important;border-radius:12px!important;font-size:22px!important}
+ .nav span{font-size:8px!important;line-height:1!important;font-weight:700!important;letter-spacing:.1px!important}
+ .nav.active{transform:translateY(-4px)!important;background:linear-gradient(145deg,#ffffff32,#ffffff0c)!important}
+ .nav.active b{width:39px!important;height:39px!important;border-radius:14px!important}
+ .hero{min-height:350px!important;padding:25px 21px!important;border-radius:29px!important}
+ .hero h1{font-size:clamp(42px,12vw,60px)!important}
+ .grid2{gap:10px!important}.tile{min-height:165px!important;padding:15px!important;border-radius:21px!important}
+ .home-aside{gap:10px!important}.aside-card{border-radius:21px!important}
+ .view-intro h1,.shorts-heading h1{font-size:43px!important}
+ .message-layout{border-radius:23px!important;overflow:hidden!important}
+ .conversation-panel,.chat-panel{border-color:#ffffff20!important}
+ .chat-active{min-height:58dvh!important}.messages-list{padding:13px!important}
+ .composer{position:sticky;bottom:0;z-index:5;padding:10px!important;backdrop-filter:blur(28px)!important}
+ .section-hero{padding:23px 18px!important;border-radius:24px!important}
+ .audio-player{position:sticky;bottom:calc(88px + env(safe-area-inset-bottom));z-index:10;padding:12px!important;border-radius:21px!important}
+ .profile-cover{height:145px!important}.profile-header{padding:14px!important}.profile-grid{padding:7px!important;gap:8px!important}
+ .modal-card,.call-card{width:min(94vw,520px)!important;border-radius:24px!important}
+ #app.shorts-open .sidebar{display:none!important}
+}
+@media(min-width:701px){
+ .sidebar{margin:14px 0 14px 14px!important;height:calc(100vh - 28px)!important;border-radius:27px!important}
+ .app{grid-template-columns:245px minmax(0,1fr)!important}
+ .main{padding:26px clamp(18px,3.5vw,52px)!important}
+ .topbar{margin-bottom:25px!important}
+}
+@media(max-width:380px){.nav span{font-size:7px!important}.nav b{width:32px!important;height:32px!important}.nav.active b{width:36px!important;height:36px!important}.main{padding-left:10px!important;padding-right:10px!important}.tile{padding:12px!important}}
+@media(prefers-reduced-motion:no-preference){.tile,.nav,.primary,.smallbtn,.profile-tabs button{transition:all .24s cubic-bezier(.2,.8,.2,1)}.tile:hover{transform:translateY(-4px)}.primary:hover{filter:brightness(1.06);transform:translateY(-1px)}}
