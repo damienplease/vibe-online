@@ -44,3 +44,76 @@ body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 @media(max-width:760px){.moments-toolbar{grid-template-columns:1fr;gap:9px;padding:10px;border-radius:21px}.moments-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}.moments-tools .primary,.moments-tools .file-label{width:100%;min-width:0;white-space:normal;text-align:center;font-size:11px;padding:10px 8px!important;min-height:46px}.shorts-stage{display:flex;flex-direction:column}.short-feed{width:100%;gap:16px}.short-post{width:min(100%,430px);max-height:calc(100dvh - 205px);aspect-ratio:9/16}.short-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.short-grid .profile-video-tile{border-radius:14px!important}.profile-tile-avatar{width:28px;height:28px;left:6px;top:6px;font-size:9px}.profile-tile-play{width:27px;height:27px;right:6px;bottom:6px}.profile-viewer-shell{padding:7px 8px 0}.profile-viewer-feed .short-post{width:min(100%,430px);height:calc(100dvh - 82px);min-height:0;max-height:none}.profile-viewer-feed .short-actions-rail{right:7px;bottom:12px}.profile-viewer-feed .short-overlay{left:12px;right:66px;bottom:12px}}
 @media(max-width:420px){.moments-tools .primary,.moments-tools .file-label{font-size:10px}.short-grid{gap:5px}.short-grid .profile-video-tile{border-radius:11px!important}}
 @media(prefers-reduced-motion:reduce){html,body,*{scroll-behavior:auto!important;scroll-snap-type:none!important}}
+
+/* VIBE invisible kinetic scrolling system — global scrollbar removal */
+html,
+body,
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important;       /* Firefox */
+  -ms-overflow-style: none !important;    /* IE / legacy Edge */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-corner {
+  display: none !important;               /* Chrome / Safari / Chromium Edge */
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Keep native wheel, trackpad and touch scrolling active in every scroll region. */
+html,
+body,
+.view,
+.main,
+.sidebar,
+.sidebar nav,
+.message-layout,
+.conversation-panel,
+.conversation-list,
+.chat-panel,
+.chat-messages,
+.profilePanel,
+.profile-tabs,
+.short-grid,
+.short-feed,
+.moments-search-results,
+.modal,
+.modal-card,
+#modalContent,
+.profile-viewer-feed,
+.live-grid,
+.track-list,
+.audio-library,
+.search-results,
+.notification-list,
+.comments-list,
+.story-carousel,
+.story-list {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Preserve two-axis gestures for horizontal rails and vertical feeds. */
+.profile-tabs,
+.story-carousel,
+.story-list {
+  touch-action: pan-x pan-y;
+}
+.short-feed,
+.profile-viewer-feed,
+.chat-messages,
+.conversation-list,
+.comments-list,
+.moments-search-results {
+  touch-action: pan-y;
+}
