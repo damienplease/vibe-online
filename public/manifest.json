@@ -1,15 +1,25 @@
 {
   "id": "/",
-  "name": "VIBE — Your Space",
+  "name": "VIBE \u2014 Your Space",
   "short_name": "VIBE",
   "description": "Your space to connect, create and listen.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#171020",
-  "theme_color": "#171020",
+  "background_color": "#09070f",
+  "theme_color": "#09070f",
   "icons": [
-    { "src": "/vibe-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/vibe-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/vibe-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/vibe-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
