@@ -343,6 +343,15 @@ app.post('/api/shorts', requireAuth, async (req, res, next) => {
     res.status(201).json({ short: result.rows[0] });
   } catch (error) { next(error); }
 });
+// Owners can remove their own Moments from their profile. Related likes, saves,
+// reposts and comments are removed automatically through the shorts foreign keys.
+app.delete('/api/shorts/:id', requireAuth, async (req, res, next) => {
+  try {
+    const result = await pool.query('DELETE FROM shorts WHERE id=$1 AND user_id=$2 RETURNING id', [req.params.id, req.session.userId]);
+    if (!result.rowCount) return apiError(res, 404, 'Moment not found or you do not own it.');
+    res.json({ deleted: true, id: result.rows[0].id });
+  } catch (error) { next(error); }
+});
 app.get('/api/shorts/:id/comments', requireAuth, async (req, res, next) => {
   try { const r=await pool.query(`SELECT c.id,c.text,c.created_at,u.username FROM short_comments c JOIN users u ON u.id=c.user_id WHERE c.short_id=$1 ORDER BY c.created_at ASC LIMIT 100`,[req.params.id]); res.json({comments:r.rows}); }
   catch(error){next(error)}
