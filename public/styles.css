@@ -117,3 +117,23 @@ body,
 .moments-search-results {
   touch-action: pan-y;
 }
+
+/* Moments layout: detached liquid-glass controls + native one-card snap feed. */
+.shorts-view{min-width:0}
+.shorts-stage{display:grid;grid-template-columns:minmax(0,1fr) 248px;align-items:start;gap:clamp(22px,3vw,44px);min-width:0}
+.short-feed{width:100%;height:calc(100dvh - 190px);min-height:480px;max-height:900px;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:22px;padding:2px 8px 24px;scroll-snap-type:y mandatory;scroll-padding-block:2px;overscroll-behavior-y:contain;touch-action:pan-y}
+.short-feed>.short-post{flex:0 0 auto;scroll-snap-align:start;scroll-snap-stop:always}
+/* Keep the existing Moments card width, 9:16 ratio and max-height untouched. */
+.moments-control-panel{position:sticky;top:24px;justify-self:end;width:100%;display:flex;flex-direction:column;gap:12px;padding:17px;border-radius:28px;background:linear-gradient(145deg,rgba(255,255,255,.78),rgba(255,255,255,.24) 52%,rgba(255,255,255,.48));border:1px solid #ffffffd9;backdrop-filter:blur(30px) saturate(165%);-webkit-backdrop-filter:blur(30px) saturate(165%);box-shadow:inset 0 2px 4px #fff, inset 0 -2px 5px #ffffff55,0 20px 48px #35414a26}
+.moments-panel-kicker{font-size:9px;letter-spacing:2px;font-weight:850;color:#53616b;padding:2px 3px 5px}
+.moments-control-panel .moments-search{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:12px;border-radius:17px;background:#ffffff75;border:1px solid #ffffffb8}
+.moments-control-panel .moments-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;font-size:12px}
+.moments-control-panel>.primary,.moments-control-panel>.file-label{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;margin:0;padding:12px!important;text-align:center;white-space:normal}
+.moments-control-panel .file-label input{display:none}
+.moments-control-panel .moments-search-results{width:100%;max-height:min(38dvh,360px);overflow-y:auto;margin:0;display:flex;flex-direction:column;gap:7px}
+.moments-control-panel .moment-search-result{background:#ffffff80;border:1px solid #ffffff90}
+/* Invisible bars; native touch, wheel, trackpad and keyboard scrolling remain enabled. */
+.short-feed,.moments-search-results{scrollbar-width:none;-ms-overflow-style:none}
+.short-feed::-webkit-scrollbar,.moments-search-results::-webkit-scrollbar{display:none;width:0;height:0;background:transparent}
+@media(max-width:900px){.shorts-stage{grid-template-columns:minmax(0,1fr) 220px;gap:16px}.moments-control-panel{padding:13px}.short-feed{height:calc(100dvh - 180px)}}
+@media(max-width:680px){.shorts-stage{display:flex;flex-direction:column;align-items:stretch;gap:14px}.moments-control-panel{position:relative;top:auto;order:-1;width:min(100%,520px);align-self:center;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;padding:11px;border-radius:22px}.moments-panel-kicker{grid-column:1/-1}.moments-control-panel .moments-search{grid-column:1/-1}.moments-control-panel>.primary,.moments-control-panel>.file-label{min-height:44px;font-size:11px}.moments-control-panel .moments-search-results{grid-column:1/-1;max-height:180px}.short-feed{width:100%;height:calc(100dvh - 260px);min-height:360px;max-height:none;gap:16px;padding-inline:0}.short-feed>.short-post{max-height:calc(100dvh - 285px)}}
