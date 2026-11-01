@@ -307,13 +307,31 @@ async function loadShorts(){
 function renderShorts(items,host){
   host.innerHTML='';
   if(!items.length){host.innerHTML='<div class="empty-state compact">No Shorts yet. Record or upload the first one.</div>';return;}
-  items.forEach(item=>{
-    const card=document.createElement('article');card.className='short-post';card.dataset.shortId=item.id;
-    card.innerHTML=`<video src="${esc(item.video_url)}" playsinline webkit-playsinline loop preload="auto" fetchpriority="high"> </video><div class="short-playback-controls"><button type="button" data-video-control="play" aria-label="Pause video">Ⅱ</button><button type="button" data-video-control="sound" aria-label="Mute video">🔊</button></div><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${esc(item.username.slice(0,2).toUpperCase())}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button>${host.id==='profileShorts'&&item.is_me?'<button data-action="delete-moment" class="delete-moment-btn" aria-label="Delete this Moment">⌫<small>Delete</small></button>':''}</div>`;
+  const isProfileGrid=host.id==='profileShorts';
+  items.forEach((item,index)=>{
+    const card=document.createElement('article');card.className='short-post'+(isProfileGrid?' profile-video-tile':'');card.dataset.shortId=item.id;card.dataset.index=index;
+    if(isProfileGrid){
+      const avatar=item.avatar_url?`<img src="${esc(item.avatar_url)}" alt="">`:esc((item.username||'V').slice(0,2).toUpperCase());
+      card.innerHTML=`<button class="profile-tile-open" type="button" aria-label="Open video ${index+1}" data-open-profile-video="${index}"><video src="${esc(item.video_url)}" muted playsinline preload="metadata"></video><span class="profile-tile-avatar">${avatar}</span><span class="profile-tile-play" aria-hidden="true">▶</span></button>`;
+    } else {
+      const avatar=item.avatar_url?`<img src="${esc(item.avatar_url)}" alt="">`:esc((item.username||'V').slice(0,2).toUpperCase());
+      card.innerHTML=`<video src="${esc(item.video_url)}" playsinline webkit-playsinline loop preload="auto" fetchpriority="high"></video><div class="short-playback-controls"><button type="button" data-video-control="play" aria-label="Pause video">Ⅱ</button><button type="button" data-video-control="sound" aria-label="Mute video">🔊</button></div><div class="short-overlay"><div class="short-author"><button class="short-avatar" data-profile="${esc(item.username)}">${avatar}</button><button class="short-username" data-profile="${esc(item.username)}">@${esc(item.username)}</button>${item.is_me?'':`<button class="short-follow" data-follow-creator="${esc(item.user_id)}">${item.is_following?'Following':'+ Follow'}</button>`}</div><p class="short-caption">${esc(item.caption||'')}</p></div><div class="short-actions-rail"><button data-action="like" class="${item.liked?'selected':''}">♥<small>${Number(item.likes)||0}</small></button><button data-action="repost" class="${item.reposted?'selected':''}">↻<small>${Number(item.reposts)||0}</small></button><button data-action="favorite" class="${item.favorited?'selected':''}">★<small>Save</small></button><button data-action="comment">●<small>${Number(item.comments)||0}</small></button>${host.id==='profileViewerFeed'&&item.is_me?'<button data-action="delete-moment" class="delete-moment-btn" aria-label="Delete this Moment">⌫<small>Delete</small></button>':''}</div>`;
+    }
     host.appendChild(card);
   });
-  if(host.id === 'shortFeed') setupShortsAutoplay(host);
+  if(host.id==='shortFeed') setupShortsAutoplay(host);
 }
+function openProfileVideoViewer(index){
+  const items=window.vibeProfileViewerItems||[];if(!items.length)return;
+  openModal(`<div class="profile-viewer-shell"><div class="profile-viewer-top"><strong>@${esc(profileData?.profile?.username||'creator')}</strong><button type="button" class="modal-close" id="closeProfileViewer" aria-label="Close viewer">×</button></div><div id="profileViewerFeed" class="profile-viewer-feed"></div></div>`);
+  const feed=$('profileViewerFeed');renderShorts(items.map(item=>({...item,is_me:!!profileData?.profile?.isMe})),feed);
+  $('closeProfileViewer').addEventListener('click',closeModal);
+  requestAnimationFrame(()=>{const target=feed.children[Math.max(0,Math.min(index,feed.children.length-1))];target?.scrollIntoView({block:'start'});});
+}
+$('modalContent').addEventListener('click',e=>{
+  const open=e.target.closest('[data-open-profile-video]');if(open){openProfileVideoViewer(Number(open.dataset.openProfileVideo));return;}
+  if(e.target.closest('#profileViewerFeed'))handleShortAction(e);
+});
 const lastVideoTap = new WeakMap();
 function triggerMomentLike(video){const card=video.closest('.short-post');const likeButton=card?.querySelector('[data-action="like"]');if(!likeButton)return;likeButton.click();const burst=document.createElement('div');burst.className='moment-like-burst';burst.textContent='♥';card.appendChild(burst);setTimeout(()=>burst.remove(),850);}
 let lastMomentTap={time:0,x:0,y:0,video:null};
@@ -418,8 +436,9 @@ function renderProfile(){
   const tabLabels={posts:'Posts',reposts:'Reposts',liked:'Liked videos',favorites:'Favorites'};
   if(!ownTabs.includes(profileTab))profileTab='posts';
   host.innerHTML=`<div class="profile-cover"></div><div class="profile-header"><div class="profile-avatar" id="profileAvatar">${p.avatarUrl?`<img src="${esc(p.avatarUrl)}" alt="Profile picture">`:esc(p.username.slice(0,2).toUpperCase())}</div><div><h2>@${esc(p.username)}</h2><p class="profile-bio">${p.isMe?'Your VIBE profile':'Creator on VIBE'}</p></div>${p.isMe?'<div class="profile-tools"><label class="smallbtn">Change photo<input id="avatarUpload" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label><button class="smallbtn" id="enableNotifications">Enable notifications</button></div>':`<button class="primary profile-follow" id="toggleFollow">${p.isFollowing?'Following':'＋ Follow'}</button>`}</div><div class="profile-stats"><div><strong>${Number(p.followers)||0}</strong><span>Followers</span></div><div><strong>${Number(p.following)||0}</strong><span>Following</span></div>${p.isMe?`<div><strong>${Number(p.likes)||0}</strong><span>Likes</span></div>`:''}</div><div class="profile-tabs">${ownTabs.map(tab=>`<button data-profile-tab="${tab}" class="${profileTab===tab?'active':''}">${tabLabels[tab]}</button>`).join('')}</div><div id="profileShorts" class="short-grid"></div>`;
-  renderShorts((profileData[profileTab]||[]).map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing})),$('profileShorts'));
-  $('profileShorts').querySelectorAll('video').forEach(v=>{v.pause();v.autoplay=false;v.removeAttribute('autoplay');v.preload='metadata';v.muted=true;v.setAttribute('controls','');v.setAttribute('aria-label','Select to play this post');});
+  window.vibeProfileViewerItems=(profileData[profileTab]||[]).map(item=>({...item,is_me:p.isMe,is_following:p.isFollowing}));
+  renderShorts(window.vibeProfileViewerItems,$('profileShorts'));
+  $('profileShorts').addEventListener('click',e=>{const tile=e.target.closest('[data-open-profile-video]');if(tile)openProfileVideoViewer(Number(tile.dataset.openProfileVideo));});
   host.querySelectorAll('[data-profile-tab]').forEach(b=>b.addEventListener('click',()=>{profileTab=b.dataset.profileTab;renderProfile()}));
   if(p.isMe){$('avatarUpload').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';uploadAvatar(f).catch(err=>toast(err.message));});$('enableNotifications').addEventListener('click',()=>enableVibeNotifications().catch(err=>toast(err.message)));}
   if(!p.isMe)$('toggleFollow').onclick=async()=>{try{const r=await api(`/api/users/${p.id}/follow`,{method:'POST'});p.isFollowing=r.following;p.followers=Math.max(0,Number(p.followers)+(r.following?1:-1));renderProfile()}catch(e){toast(e.message)}};
