@@ -190,6 +190,8 @@ $('logout').addEventListener('click', async () => {
 function attachRemoteMedia(stream) {
   const video=$('remoteVideo'); const audio=$('remoteAudio');
   video.srcObject=stream; video.muted=true;
+  $('remoteFallback').classList.toggle('hidden', stream.getVideoTracks().some(t=>t.readyState==='live' && t.enabled));
+  stream.getVideoTracks().forEach(track=>{track.onmute=()=> $('remoteFallback').classList.remove('hidden');track.onunmute=()=> $('remoteFallback').classList.add('hidden');track.onended=()=> $('remoteFallback').classList.remove('hidden');});
   audio.srcObject=stream; audio.muted=false; audio.volume=1;
   const play=audio.play(); if(play&&typeof play.catch==='function') play.catch(()=>{ $('callStatus').textContent='Call connected. Tap the page or use the audio controls if you cannot hear the other person.'; });
   if(video.play) video.play().catch(()=>{});
@@ -206,7 +208,7 @@ async function startCall(mode) {
     peer.ontrack = e => { attachRemoteMedia(e.streams[0]); };
     peer.onicecandidate = e => { if(e.candidate && currentCall) socket.emit('call:ice',{conversationId:currentCall.conversationId,targetUserId:currentCall.targetUserId,candidate:e.candidate}); };
     peer.onconnectionstatechange = () => { if(peer && ['failed','disconnected'].includes(peer.connectionState)) $('callStatus').textContent='Connection interrupted. A TURN server may be required.'; };
-    $('localVideo').srcObject=localStream; $('remoteVideo').srcObject=null; $('remoteAudio').srcObject=null; $('remoteAudio').srcObject=null;
+    $('localVideo').srcObject=localStream; $('localFallback').classList.toggle('hidden', localStream.getVideoTracks().some(t=>t.enabled)); $('remoteFallback').classList.remove('hidden'); $('remoteVideo').srcObject=null; $('remoteAudio').srcObject=null;
     $('incomingActions').classList.add('hidden'); $('callTitle').textContent='Calling @'+other.username; $('callStatus').textContent='Waiting for them to answer…'; $('callLayer').classList.remove('hidden');
     socket.emit('call:invite',{conversationId:activeConversation.id,targetUserId:other.id,mode});
     // Offer is sent when callee accepts, after they have acquired their media.
@@ -229,7 +231,7 @@ async function acceptInvite() {
     localStream.getTracks().forEach(t=>peer.addTrack(t,localStream));
     peer.ontrack=e=>{attachRemoteMedia(e.streams[0]);};
     peer.onicecandidate=e=>{if(e.candidate&&currentCall)socket.emit('call:ice',{conversationId:currentCall.conversationId,targetUserId:currentCall.targetUserId,candidate:e.candidate});};
-    $('localVideo').srcObject=localStream; $('remoteVideo').srcObject=null; $('remoteAudio').srcObject=null; $('remoteAudio').srcObject=null;
+    $('localVideo').srcObject=localStream; $('localFallback').classList.toggle('hidden', localStream.getVideoTracks().some(t=>t.enabled)); $('remoteFallback').classList.remove('hidden'); $('remoteVideo').srcObject=null; $('remoteAudio').srcObject=null;
     $('incomingActions').classList.add('hidden'); $('callTitle').textContent='Connected to @'+invite.fromUsername; $('callStatus').textContent='Setting up call…';
     socket.emit('call:accept',{conversationId:invite.conversationId,targetUserId:invite.fromUserId});
     // Callee sends an offer; caller answers.
@@ -242,14 +244,14 @@ $('acceptCall').addEventListener('click',acceptInvite);
 $('declineCall').addEventListener('click',()=>{if(pendingInvite&&socket)socket.emit('call:decline',{conversationId:pendingInvite.conversationId,targetUserId:pendingInvite.fromUserId});pendingInvite=null;$('callLayer').classList.add('hidden');$('incomingActions').classList.add('hidden')});
 $('endCall').addEventListener('click',()=>finishCall(true));
 $('remoteVideo').addEventListener('dblclick',async()=>{try{if(document.pictureInPictureEnabled&&$('remoteVideo').readyState>=2)await $('remoteVideo').requestPictureInPicture();}catch{toast('Picture-in-picture is not available in this browser.');}});
-$('muteCall').addEventListener('click',()=>{muted=!muted;localStream?.getAudioTracks().forEach(t=>t.enabled=!muted);$('muteCall').textContent=muted?'Unmute mic':'Mute mic'});
-$('cameraCall').addEventListener('click',()=>{cameraOff=!cameraOff;localStream?.getVideoTracks().forEach(t=>t.enabled=!cameraOff);$('cameraCall').textContent=cameraOff?'Camera on':'Camera off'});
+$('muteCall').addEventListener('click',()=>{muted=!muted;localStream?.getAudioTracks().forEach(t=>t.enabled=!muted);$('muteCall').textContent=muted?'Unmute':'Mute';$('muteCall').setAttribute('aria-pressed',String(muted));$('muteCall').querySelector('.control-label').textContent=muted?'Unmuted':'Mute';});
+$('cameraCall').addEventListener('click',()=>{cameraOff=!cameraOff;localStream?.getVideoTracks().forEach(t=>t.enabled=!cameraOff);$('cameraCall').textContent=cameraOff?'Camera on':'Camera off';$('cameraCall').setAttribute('aria-pressed',String(cameraOff));$('cameraCall').querySelector('.control-label').textContent=cameraOff?'Camera on':'Camera off';$('localFallback').classList.toggle('hidden',!cameraOff);});
 async function finishCall(notify) {
   if(notify&&currentCall&&socket)socket.emit('call:end',{conversationId:currentCall.conversationId,targetUserId:currentCall.targetUserId});
   if(peer){peer.ontrack=null;peer.onicecandidate=null;peer.close();peer=null}
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null}
   $('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('remoteAudio').srcObject=null;$('callLayer').classList.add('hidden');$('incomingActions').classList.add('hidden');currentCall=null;pendingInvite=null;muted=false;cameraOff=false;
-  $('muteCall').textContent='Mute mic';$('cameraCall').textContent='Camera off';
+  $('muteCall').textContent='Mute';$('cameraCall').textContent='Camera off';$('muteCall').setAttribute('aria-pressed','false');$('cameraCall').setAttribute('aria-pressed','false');$('muteCall').querySelector('.control-label').textContent='Mute';$('cameraCall').querySelector('.control-label').textContent='Camera off';$('localFallback').classList.add('hidden');$('remoteFallback').classList.remove('hidden');
 }
 let playlist = [], currentAudioIndex = -1;
 $('audioFiles').addEventListener('change',e=>{
